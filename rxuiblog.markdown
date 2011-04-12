@@ -361,7 +361,7 @@ ViewModel constructor.
         //
 
         var future_data = GetDataFromTheInternet.RegisterAsyncFunction(i => {
-            Thread.Sleep(5 * 1000);	// This is a pretend async query
+            Thread.Sleep(5 * 1000); // This is a pretend async query
             return String.Format("The Future will be {0}x as awesome!", i);
         });
 
@@ -416,7 +416,7 @@ really interesting way to express ideas, calling back somewhat to
 Knuth's ideas of
 [Literate Programming](http://en.wikipedia.org/wiki/Literate_Programming)
 
-![image](http://blog.paulbetts.org/wp-photos/RxSampleApp1.png)  
+![image](wp-photos/RxSampleApp1.png)  
 *Our sample app helps us make a list of Awesome People*
 
 Make sure to read the code!
@@ -430,7 +430,7 @@ source code, they all start with the tag "COOLSTUFF" - searching
 for it will help you find guidance on Rx, MVVM, as well as things
 like layout and bindings.
 
-![image](http://blog.paulbetts.org/wp-photos/RxSampleApp2.png)  
+![image](wp-photos/RxSampleApp2.png)  
 *This dialog shows validation, async web requests, and a clever use of Flickr*
 
 Where's the code again?
@@ -444,7 +444,9 @@ to work, let me know via Email at
 [Email the mailing list](mailto:reactivexaml@googlegroups.com) and
 I'll help you out.
 
-ReactiveXaml series: ReactiveObject, and why Rx is awesome
+
+# ReactiveXaml series: ReactiveObject, and why Rx is awesome
+
 ViewModels via ReactiveObject
 -----------------------------
 
