@@ -2009,6 +2009,16 @@ if you're new to using SelectMany with web services. Here's the
 easy way to understand it in two lines, in terms of PowerShell /
 \*nix pipes:
 
+    // This is Pseudo-Powershell :)
+    [1,2,3] | someService | someOtherService
+
+    // is like this in Rx.NET; the difference though is that we
+    // never wait anywhere.
+    new[]{1,2,3}.AsObservable()
+        .SelectMany(someService)
+        .SelectMany(someOtherService)
+        .Subscribe(Console.WriteLine);
+
 The cool thing about Rx.NET is that it makes it easy to write
 completely non-blocking calls a-la node.js. If you've ever used the
 *BeginXXXX/EndXXXX* calls, you know that it's not particularly easy
@@ -2046,11 +2056,12 @@ ObservableAsyncMRUCache to manage concurrency. Despite the fact
 that calls can be queued, your code doesn't actually wait - you
 just won't be called back until the call completes.
 
-![image](http://blog.paulbetts.org/wp-photos/CachedSelectMany.png)  
+![image](wp-photos/CachedSelectMany.png)  
 *Bar has to wait in line before it can run*
 
-ReactiveUI Message Bus - decoupling objects using the
-publish/subscribe pattern
+
+# ReactiveUI Message Bus - decoupling objects using the publish/subscribe pattern
+
 Message buses allow us to decouple code
 ---------------------------------------
 
@@ -2102,7 +2113,8 @@ use these methods instead of the above ones:
 -   **IObservable ViewModelForType** - Return the ViewModel for the
     specified type
 
-New Release: ReactiveUI 2.2.1
+# New Release: ReactiveUI 2.2.1
+
 What does ReactiveUI do?
 ------------------------
 
@@ -2164,7 +2176,9 @@ If NuGet isn't your thing, you can also find the binaries on the
 Github page:
 [ReactiveUI 2.2.1.0.zip](https://github.com/downloads/xpaulbettsx/ReactiveUI/ReactiveUI%202.2.1.0.zip).
 
-Using ReactiveUI with MVVM Light (or any other framework!)
+
+# Using ReactiveUI with MVVM Light (or any other framework!)
+
 ReactiveUI: Is it All or None?
 ------------------------------
 
@@ -2198,14 +2212,36 @@ panic, it's easy!
 **Step 1:** Change the class definition to implement
 IReactiveNotifyPropertyChanged.
 
-`public class MainViewModel : ViewModelBase, IReactiveNotifyPropertyChanged`
+    public class MainViewModel : ViewModelBase, IReactiveNotifyPropertyChanged
+
 **Step 2:** Add a field of type "MakeObjectReactiveHelper", and
 initialize it in the constructor:
 
-`MakeObjectReactiveHelper _reactiveHelper;  public MainViewModel() {     _reactiveHelper = new MakeObjectReactiveHelper(this);     /* More stuff */ }`
+    MakeObjectReactiveHelper _reactiveHelper;
+    public MainViewModel()
+    {
+        _reactiveHelper = new MakeObjectReactiveHelper(this);
+        /* More stuff */
+    }
+
 **Step 3:** Paste in the following code at the end of your class,
 which just uses \_reactiveHelper to implement the entire
 interface:
+
+    public IObservable<IObservedChange<object, object>> Changed {
+        get { return _reactiveHelper.Changed; }
+    }
+
+    public IObservable<IObservedChange<object, object>> Changing {
+        get { return _reactiveHelper.Changing; }
+    }
+
+    public IDisposable SuppressChangeNotifications() {
+        return _reactiveHelper.SuppressChangeNotifications();
+    }
+
+    public event PropertyChangingEventHandler PropertyChanging;
+
 
 An important caveat about MakeObjectReactiveHelper
 --------------------------------------------------
@@ -2227,6 +2263,25 @@ With RxUI 2.2, you can easily create a collection which tracks an
 existing collection, even if the source is an ObservableCollection.
 Here's the syntax:
 
+    // This is the WPF/Silverlight ObservableCollection, not from Rx at all!
+    ObservableCollection<MyCoolModel> modelCollection;
+
+    model.Length
+    >>> 4
+
+    // Create a View Model Collection that will track the Model collection
+    var viewModelCollection = modelCollection.CreateDerivedCollection(
+        x => new MyCoolViewModel(x));
+
+    viewModelCollection.Length
+    >>> 4
+
+    // Now, changes to modelCollection are mirrored in viewModelCollection
+    modelCollection.Add(new MyCoolModel());
+
+    viewModelCollection.Length
+    >>> 5
+
 Creating ReactiveCommands like RelayCommands
 --------------------------------------------
 
@@ -2234,6 +2289,9 @@ Unfortunately, the story for ICommand isn't as easy, you have to
 wrap commands one-at-a-time in order to subscribe to them. Here's
 how to do it:
 
-`public static ReactiveCommand WrapCommand(ICommand cmd) {     return ReactiveCommand.Create(cmd.CanExecute, cmd.Execute); }`
+    public static ReactiveCommand WrapCommand(ICommand cmd)
+    {
+        return ReactiveCommand.Create(cmd.CanExecute, cmd.Execute);
+    }
 
 <!-- vim: ts=4 sw=4 et : -->
