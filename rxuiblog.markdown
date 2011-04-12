@@ -97,7 +97,6 @@ interface will able to access a logger for that class (i.e.
 `this.Log().Warn("Something bad happened!");`)
 
 
-
 # ReactiveXaml series: ReactiveCommand
 
 
@@ -117,14 +116,12 @@ example:
     cmd.Execute("Hello");
     "Hello"
 
-
 Well that's boring, where's the fun stuff??
 -------------------------------------------
 
 However, here's where it gets interesting - we can also provide
 IObservable<bool\> as our CanExecute. For example, here's a command
 that can only run when the mouse is up:
-
 
     var mouseIsUp = Observable.Merge(
         Observable.FromEvent<MouseButtonEventArgs>(window, "MouseDown")
@@ -135,7 +132,6 @@ that can only run when the mouse is up:
 
     var cmd = new ReactiveCommand(mouseIsUp);
     cmd.Subscribe(x => Console.WriteLine(x));
-
 
 Or, how about a command that can only run if two other commands are
 disabled:
@@ -148,7 +144,6 @@ disabled:
         .CombineLatest(cmd2.CanExecuteObservable, (lhs, rhs) => !(lhs && rhs));
 
     var new_cmd = new ReactiveCommand(can_exec, Console.WriteLine);
-
 
 One thing that's important to notice here, is that the command's
 CanExecute updates **immediately**, instead of relying on
@@ -169,7 +164,6 @@ into the Execute call). This means, that Subscribe can act the same
 as the Execute Action, or we can actually get a fair bit more
 clever. For example:
 
-
     var cmd = ReactiveCommand.Create(x => x is int, null);
 
     cmd.Where(x => ((int)x) % 2 == 0)
@@ -185,7 +179,6 @@ clever. For example:
 
     cmd.Execute(5);
     >>> "Odd numbers like 5 are even cooler, especially at (the current time)!"
-
 
 Sum it all up, like that guy in Scrubs does all the time
 --------------------------------------------------------
@@ -224,7 +217,21 @@ Dispatcher.BeginInvoke solves this
 So, once you dig around on the Internet a bit, you find out the
 pattern to solve this problem involves the Dispatcher:
 
-`void SomeUIEvent(object o, EventArgs e) {     var some_data = this.SomePropertyICanOnlyGetOnTheUIThread;       var t = new Task(() => {         var result = doSomethingInTheBackground(some_data);           Dispatcher.BeginInvoke(new Action(() => {             this.UIPropertyThatWantsTheCalculation = result;         }));     }       t.Start(); }`
+    void SomeUIEvent(object o, EventArgs e)
+    {
+        var some_data = this.SomePropertyICanOnlyGetOnTheUIThread;
+     
+        var t = new Task(() => {
+            var result = doSomethingInTheBackground(some_data);
+     
+            Dispatcher.BeginInvoke(new Action(() => {
+                this.UIPropertyThatWantsTheCalculation = result;
+            }));
+        }
+     
+        t.Start();
+    }
+
 We use this pattern a lot, let's make it more succinct
 ------------------------------------------------------
 
@@ -261,7 +268,15 @@ Here's a simple use of a Command, who will run a task in the
 background, and only allow one at a time (i.e. its CanExecute will
 return false until the action completes)
 
-`var cmd = new ReactiveAsyncCommand(null, 1 /*at a time*/);  cmd.RegisterAsyncAction(i => {     Thread.Sleep((int)i * 1000); // Pretend to do work };  cmd.Execute(5 /*seconds*/); cmd.CanExecute(5);  // False! We're still chewing on the first one.`
+    var cmd = new ReactiveAsyncCommand(null, 1 /*at a time*/);
+
+    cmd.RegisterAsyncAction(i => {
+        Thread.Sleep((int)i * 1000); // Pretend to do work
+    };
+
+    cmd.Execute(5 /*seconds*/);
+    cmd.CanExecute(5);  // False! We're still chewing on the first one.
+
 Putting it all together
 -----------------------
 
@@ -270,10 +285,50 @@ calculating a value and displaying it in the UI, it's easiest to
 make a very simple MVVM application. Here's the XAML, and the basic
 class:
 
-`<window x:Class="RxBlogTest.MainWindow"         x:Name="Window" Height="350" Width="525">          <grid DataContext="{Binding ViewModel, ElementName=Window}">         <stackpanel HorizontalAlignment="Center"  VerticalAlignment="Center">             <textblock Text="{Binding DataFromTheInternet}" FontSize="18"/>              <button Content="Click me!" Command="{Binding GetDataFromTheInternet}"                      CommandParameter="5" MinWidth="75" Margin="0,6,0,0"/>         </stackpanel>     </grid> </window>`
+    <Window x:Class="RxBlogTest.MainWindow"
+            x:Name="Window" Height="350" Width="525">
+        
+        <Grid DataContext="{Binding ViewModel, ElementName=Window}">
+            <Stackpanel HorizontalAlignment="Center"  VerticalAlignment="Center">
+                <Textblock Text="{Binding DataFromTheInternet}" FontSize="18"/>
+
+                <Button Content="Click me!" Command="{Binding GetDataFromTheInternet}" 
+                        CommandParameter="5" MinWidth="75" Margin="0,6,0,0"/>
+            </Stackpanel>
+        </Grid>
+    </Window>
+
 And the codebehind:
 
-`using System; using System.Threading; using System.Windows; using ReactiveXaml;  namespace RxBlogTest {     public partial class MainWindow : Window     {         public AppViewModel ViewModel { get; protected set; }         public MainWindow()         {             ViewModel = new AppViewModel();             InitializeComponent();         }     }      public class AppViewModel : ReactiveValidatedObject     {         ObservableAsPropertyHelper[string] _DataFromTheInternet;         public string DataFromTheInternet {             get { return _DataFromTheInternet.Value; }         }          public ReactiveAsyncCommand GetDataFromTheInternet { get; protected set; }     } }`
+    using System;
+    using System.Threading;
+    using System.Windows;
+    using ReactiveXaml;
+
+    namespace RxBlogTest
+    {
+        public partial class MainWindow : Window
+        {
+            public AppViewModel ViewModel { get; protected set; }
+            public MainWindow()
+            {
+                ViewModel = new AppViewModel();
+                InitializeComponent();
+            }
+        }
+
+        public class AppViewModel : ReactiveValidatedObject
+        {
+            ObservableAsPropertyHelper<string> _DataFromTheInternet;
+            public string DataFromTheInternet {
+                get { return _DataFromTheInternet.Value; }
+            }
+
+            public ReactiveAsyncCommand GetDataFromTheInternet { get; protected set; }
+        }
+    }
+
+
 This is a simple MVVM application, whose ViewModel has two items -
 a Command called "GetDataFromTheInternet", and a place to store the
 results, a property called "DataFromTheInternet". I'll describe
@@ -296,7 +351,27 @@ Execute().
 Here's how we actually implement the async function, in the
 ViewModel constructor.
 
-`public AppViewModel() {     GetDataFromTheInternet = new ReactiveAsyncCommand(null, 1 /*at a time*/);      //     // This function will return a "stream" of results, one per invocation     // of the Command     //      var future_data = GetDataFromTheInternet.RegisterAsyncFunction(i => {         Thread.Sleep(5 * 1000); // This is a pretend async query         return String.Format("The Future will be {0}x as awesome!", i);     });      // OAPH will "watch" future_data, and raise property changes when new values     // come in. It'll also provide the latest result that came in.     _DataFromTheInternet = new ObservableAsPropertyHelper<string>(future_data,         x => RaisePropertyChanged("DataFromTheInternet")); } </string>`
+    public AppViewModel()
+    {
+        GetDataFromTheInternet = new ReactiveAsyncCommand(null, 1 /*at a time*/);
+
+        //
+        // This function will return a "stream" of results, one per invocation
+        // of the Command
+        //
+
+        var future_data = GetDataFromTheInternet.RegisterAsyncFunction(i => {
+            Thread.Sleep(5 * 1000);	// This is a pretend async query
+            return String.Format("The Future will be {0}x as awesome!", i);
+        });
+
+        // OAPH will "watch" future_data, and raise property changes when new values
+        // come in. It'll also provide the latest result that came in.
+        _DataFromTheInternet = new ObservableAsPropertyHelper<string>(future_data,
+            x => RaisePropertyChanged("DataFromTheInternet"));
+    }
+
+
 Why is this cool?
 -----------------
 
@@ -323,10 +398,12 @@ Where's the Code?
 
 Get the code here:
 [ReactiveAsyncCmd.zip](http://paulbetts.org/blog_samples/ReactiveAsyncCmd.zip).
-Also, I'm too lazy to correct the typo in the namespace, bt it
+Also, I'm too lazy to correct the typo in the namespace, but it
 doesn't matter. Thoughts? Comments? Ideas?
 
-ReactiveXaml series: A Sample MVVM application
+
+# ReactiveXaml series: A Sample MVVM application
+
 A Sample App makes understanding ReactiveXaml way easier
 --------------------------------------------------------
 
