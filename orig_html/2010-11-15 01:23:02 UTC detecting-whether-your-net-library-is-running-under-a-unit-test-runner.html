@@ -1,0 +1,29 @@
+Detecting whether your .NET library is running under a unit test runner
+
+<p>
+Here's a piece of code that I found useful for <a href="http://github.com/xpaulbettsx/ReactiveXaml">ReactiveXaml</a>, how to detect whether you are running under the unit test runner. For WPF/Silverlight testing, this is important to know since Dispatcher.Current exists but is bogus (i.e. none of the things you queue to it will run during the unit tests). The official version comes <a href="https://github.com/xpaulbettsx/ReactiveXaml/blob/master/ReactiveXaml/RxApp.cs#L86">from here</a>.
+</p>
+
+<code lang="csharp">
+public static bool InUnitTestRunner()
+{
+    string[] test_assemblies = new[] {
+        "CSUNIT",
+        "NUNIT",
+        "XUNIT",
+        "MBUNIT",
+        "TESTDRIVEN",
+        "QUALITYTOOLS.TIPS.UNITTEST.ADAPTER",
+        "QUALITYTOOLS.UNITTESTING.SILVERLIGHT",
+        "PEX",
+    };
+
+#if SILVERLIGHT
+    return Deployment.Current.Parts.Any(x => 
+      test_assemblies.Any(name => x.Source.ToUpperInvariant().Contains(name)));
+#else
+    return AppDomain.CurrentDomain.GetAssemblies().Any(x =>
+      test_assemblies.Any(name => x.FullName.ToUpperInvariant().Contains(name)));
+#endif
+}
+</code>

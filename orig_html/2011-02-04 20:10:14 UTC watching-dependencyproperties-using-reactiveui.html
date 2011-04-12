@@ -1,0 +1,39 @@
+Watching DependencyProperties using ReactiveUI
+
+<h2>Watching DependencyProperties in WPF is easy...</h2>
+
+<p>
+One of the things that is pretty useful in XAML-based frameworks like WPF and Silverlight when working in the codebehind is being able to be notified when a DependencyProperty changes. In the ViewModel, we have a different mechanism called INotifyPropertyChanged to accomplish this, but DependencyProperties are still an important part of WPF/Silverlight.
+</p>
+
+<p>
+Let's see how we would do this in WPF - it's fairly straightforward:
+</p>
+
+<p>
+<script src="https://gist.github.com/812092.js?file=gistfile1.cs"></script>
+</p>
+
+<h2>...but really ugly in Silverlight</h2>
+
+<p>
+Unfortunately, this isn't possible in Silverlight - it's only possible to wire up a <i>single</i> callback, and it can only be done by the class that actually creates the DependencyProperty. This might work fine in some scenarios, but something less tightly coupled is often needed.
+</p>
+
+<p>
+The solution is to use Attached Properties, as described <a href="http://amazedsaint.blogspot.com/2009/12/silverlight-listening-to-dependency.html">Anoop Madhusudanan's blog post</a> - register an attached property, then hook <i>that</i> change notification.
+</p>
+
+<h2>ReactiveUI now does this for you</h2>
+
+<p>
+In ReactiveUI as of v2.0, there is a new method called ObservableFromDP - this method works similarly to the ViewModel's ObservableFromProperty, but with less syntactic noise:
+</p>
+
+<p>
+<script src="https://gist.github.com/812093.js?file=gistfile1.cs"></script>
+</p>
+
+<p>
+Of course, since it's an Observable and not an event handler, all of the power of Rx.NET applies to this as well. Nothing revolutionary, but definitely makes things easier!
+</p>

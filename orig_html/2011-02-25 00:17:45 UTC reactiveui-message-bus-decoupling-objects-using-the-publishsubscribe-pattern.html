@@ -1,0 +1,39 @@
+ReactiveUI Message Bus - decoupling objects using the publish/subscribe pattern
+
+<h2>Message buses allow us to decouple code</h2>
+
+<p>
+If you've used the MVVM pattern enough, you'll sometimes find that you get "stuck" - you need to access a certain ViewModel (usually the "main" ViewModel), but at the point you need it, it's too far removed from the context that you're using it in. Sometimes if the object is a Singleton it's appropriate to think of something like the <a href="http://en.wikipedia.org/wiki/Managed_Extensibility_Framework">Managed Extensibility Framework</a> to get a reference.
+</p>
+
+<p>
+Other times, a Messaging framework is more appropriate - ReactiveUI provides an "Rx"-take on the Messenger (Publish/Subscribe) pattern. With the Messenger pattern, we don't have to make all our ViewModels related to each other, which is important for writing testable code, since I can easily replace related objects with mock objects. 
+</p>
+
+<h2>ReactiveUI's MessageBus</h2>
+
+<p>
+ReactiveUI's MessageBus is based on the Type of the message object. If the Message type isn't unique enough, an extra Contract string can be provided to make the source unique.
+</p>
+
+<p>
+There are three main methods that we're interested in:
+</p>
+
+<ul>
+<li><b>RegisterMessageSource(IObservable source)</b> - Register an IObservable as a message source - anything that is published on the IObservable gets published to the bus.</li>
+<li><b>SendMessage(message)</b> - Publish a single item on the bus instead of having to use an Observable.</li>
+<li><b>IObservable Listen()</b> - Get an Observable for the specified source - you can either Subscribe to it directly, or use any of the Rx operators to filter what you want.</li>
+</ul>
+
+<h2>Special support for singleton ViewModels</h2>
+
+<p>
+For ViewModels that <i>only have a single instance</i>, there are a number of helper methods that make using the MessageBus easier - use these methods instead of the above ones:
+</p>
+
+<ul>
+<li><b>RegisterViewModel(ViewModel)</b> - Registers a ViewModel object; call this in your ViewModel constructor.</li>
+<li><b>IObservable ListenToViewModel</b> - Listen for change notifications on a ViewModel object</li>
+<li><b>IObservable ViewModelForType</b> - Return the ViewModel for the specified type</li>
+</ul>

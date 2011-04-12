@@ -1,0 +1,170 @@
+ReactiveXaml series: Implementing search with ObservableAsPropertyHelper
+
+<h2>Implementing an auto-search TextBox using Rx and ReactiveXaml</h2>
+
+<p>
+One of the most important classes in <a href="http://github.com/xpaulbettsx/ReactiveXaml">ReactiveXaml</a> called <code>ObservableAsPropertyHelper</code> is a class that allows you to take an IObservable and convert it into a read-only, change notifying property. This class is really useful for exposing the results of your code (i.e. the "output"). This class makes it easy to complete the scenario that was described in the <a href="http://blog.paulbetts.org/index.php/2010/06/27/reactivexaml-series-reactiveasynccommand/">previous blog post about ReactiveAsyncCommand</a>. One of the cool things about ObservableAsPropertyHelper, is that it guarantees that it will run notifications on the UI thread via the Dispatcher so that you don't have to think about what thread the observable notification came in on.
+</p>
+
+<h2>The sample app</h2>
+
+<p align="center">
+<a href="http://www.paulbetts.org/blog_samples/OAPHSample.zip">
+<img src="http://blog.paulbetts.org/wp-photos/OAPHSample.png" />
+</a><br />
+<i>Click on the image to download the sample project.</i>
+
+</p>
+
+<h2>Going through the code</h2>
+
+<p>
+First, let's look at our main data item - a Flickr search result item. Since we will never change these objects, we don't need any INotifyPropertyChanged goo, just regular old auto-properties:
+
+<code lang="C#">
+public class FlickrPhoto {
+    public string Title { get; set; }
+    public string Description { get; set; }
+    public string Url { get; set; }
+}
+</code>
+
+</p>
+
+<p>
+Now, the app data model - there's two real bits; the <b>current search text</b>, and the <b>List of FlickrPhoto results</b>. In ReactiveXaml, all of this code below is boilerplate - these code chunks are just some stuff to memorize or put into a snippet and never look at it again. <i>Note: once again because of a syntax highlighting glitch, generics are using [] instead of &lt; &gt;</i>
+
+<code lang="C#">
+
+public class AppViewModel : ReactiveValidatedObject
+{
+    //
+    // This is the canonical way to make a read-write property
+    //
+
+    string _SearchTerm;
+    public string SearchTerm {
+        get { return _SearchTerm; }
+        set { this.RaiseAndSetIfChanged(x => x.SearchTerm, value); }
+    }
+
+    //
+    // This is the canonical way to make a read-only property whose value
+    // is backed by an IObservable
+    //
+
+    ObservableAsPropertyHelper[List[FlickrPhoto]] _Photos;
+    public List[FlickrPhoto] Photos {
+        get { return _Photos.Value; }
+    }
+
+    ObservableAsPropertyHelper[Visibility] _SpinnerVisibility;
+    public Visibility SpinnerVisibility {
+        get { return _SpinnerVisibility.Value; }
+    }
+
+    public ReactiveAsyncCommand ExecuteSearch { get; protected set; }
+}
+</code>
+</p>
+
+<h2>Now here's the interesting part</h2>
+
+<p>
+Our goal is to write a search box which automatically issues searches in the background as the user types, similar to what most browsers do with the address bar. However, there are a number of tricky aspects to this:
+
+<ul>
+<li>We don't want to issue too many requests, especially when the user is still typing, so wiring something directly to KeyUp would be lousy.</li>
+<li>Don't issue queries for empty strings, and don't issue the same query 2x (for example, if the user types "foo", then quickly hits Backspace, then retypes 'o', we should realize that we already have the right results)</li>
+<li>The delay should be consistent, so having a global timer won't work because sometimes the user will hit the key right before the timer fires, so the delay will vary wildly between the max time and instantaneous.</li>
+</ul>
+</p>
+
+<p>
+Implementing this properly using traditional methods would be absolutely awful. Here's the code on how we do it, and it's 5 lines in the constructor:
+
+<code lang="C#">
+
+public AppViewModel()
+{
+    ExecuteSearch = new ReactiveAsyncCommand(null, 0);
+
+    //
+    // Take the inflight items and toggle the visibility
+    //
+
+    var should_spin = ExecuteSearch.ItemsInflight.Select(x => x > 0 ? Visibility.Visible : Visibility.Collapsed);
+
+    //
+    // This was described last time too, we actually do the async function
+    // here and RegisterAsyncFunction will return an IObservable which
+    // gives us the output, one item per invocation of ExecuteSearch.Execute
+    // 
+
+    var results = ExecuteSearch.RegisterAsyncFunction(
+        term => GetSearchResultsFromFlickr((string)term));
+
+    //
+    // Here's the awesome bit - every time the SearchTerm changes
+    // throttled to every 800ms (i.e. drop changes that are happening
+    // too quickly). Grab the actual text, then only notify on unique
+    // changes (i.e. ignore "A" => "A"). Finally, only tell us when 
+    // the string isn't empty. When *all* of those things are true,
+    // fire ExecuteSearch and pass it the term.
+    // 
+
+    this.ObservableForProperty[AppViewModel, string]("SearchTerm")
+        .Throttle(TimeSpan.FromMilliseconds(800))
+        .Select(x => x.Value).DistinctUntilChanged()
+        .Where(x => !String.IsNullOrWhiteSpace(x))
+        .Subscribe(ExecuteSearch.Execute);
+
+    //
+    // This code is also boilerplate, it's the standard way to take our
+    // observable and wire it up to the property, giving it an initial
+    // value.
+    //
+
+    _SpinnerVisibility = new ObservableAsPropertyHelper[Visibility](
+        should_spin, x => RaisePropertyChanged("SpinnerVisibility"), Visibility.Collapsed);
+
+    _Photos = new ObservableAsPropertyHelper[List[FlickrPhoto]](
+        results, _ => RaisePropertyChanged("Photos"));
+}
+
+</code></p>
+
+<p>
+Here's the code that actually does the work as an aside, it's not nearly as pretty:
+
+<code lang="C#">
+
+//
+// If you don't understand this code, don't worry about it, I just got lazy.
+// We're just hack-parsing the RSS feed and grabbing out title/desc/url and
+// newing up the list of FlickrPhotos while blatantly abusing Zip.
+//
+
+public static List[FlickrPhoto] GetSearchResultsFromFlickr(string search_term)
+{
+    var doc = XDocument.Load(String.Format(CultureInfo.InvariantCulture,
+        "http://api.flickr.com/services/feeds/photos_public.gne?tags={0}&format=rss_200",
+        HttpUtility.UrlEncode(search_term)));
+    if (doc.Root == null)
+        return null;
+
+    var titles = doc.Root.Descendants("{http://search.yahoo.com/mrss/}title")
+        .Select(x => x.Value);
+    var descriptions = doc.Root.Descendants("{http://search.yahoo.com/mrss/}description")
+        .Select(x => HttpUtility.HtmlDecode(x.Value));
+    var items = titles.Zip(descriptions,
+        (t, d) => new FlickrPhoto() { Title = t, Description = d }).ToArray();
+
+    var urls = doc.Root.Descendants("{http://search.yahoo.com/mrss/}thumbnail")
+        .Select(x => x.Attributes("url").First().Value);
+
+    var ret = items.Zip(urls, (item, url) => { item.Url = url; return item; }).ToList();
+    return ret;
+}
+
+</code></p>

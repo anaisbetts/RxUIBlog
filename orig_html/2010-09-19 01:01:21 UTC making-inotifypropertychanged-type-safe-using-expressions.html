@@ -1,0 +1,93 @@
+Making INotifyPropertyChanged type-safe using Expressions
+
+<p>
+<a href="http://groups.google.com/group/reactivexaml/browse_thread/thread/c6fc10f65de05be0">Some folks on the mailing list</a> for <a href="http://bit.ly/rxxaml">ReactiveXaml</a> rightly pointed out some code in ReactiveXaml that could really use some work - my implementation of INotifyPropertyChanged's "RaiseAndSetIfChanged".  For the impatient, <a href="http://github.com/xpaulbettsx/ReactiveXaml/commit/98001677500eeed55b53b63642a2f38292987a4d#L3R143">here's how I did it</a>
+</p>
+
+<h2>Trying to make RaisePropertyChanged less verbose</h2>
+
+<p>
+This method is a helper method designed to encapsulate the following common code pattern when implementing a property:
+</p>
+
+
+<ol>
+<li>Make sure that the property is different than the original value</li>
+<li>Set the property to the new value</li>
+<li>Call <i>RaisePropertyChanged</i> with the name of the property that has changed</li>
+</ol>
+
+<p>
+Doing this via a helper is a little bit tricky - the naive approach often forgets #1 entirely, or will try to do #2 and #3 in the opposite order, resulting in WPF/Silverlight not correctly updating. Another problem is that we usually have to pass in a string literal to RaisePropertyChanged (as well as RaiseAndSetIfChanged). While I'm a Rubyist and string literals don't bother <i>me</i>, most .NET developers are annoyed by it, and it also can lead to really evil-to-debug issues after refactoring.
+</p>
+
+<h2>Using Expression Trees to implement a better version</h2>
+
+<p>Here's what the new syntax for defining properties looks like:</p>
+
+<code lang="C#">
+string _SomeProperty; 
+public string SomeProperty { 
+    get { return _SomeProperty; } 
+    set { _SomeProperty = this.RaiseAndSetIfChanged(x => x.SomeProperty, value); } 
+}
+</code>
+
+<p>Much improved, and fairly clean (we could do way better if C# had Macros, but I digress).  Compare this with the old, dumb looking syntax:</p>
+
+<code lang="C#">
+string _SomeProperty; 
+public string SomeProperty { 
+    get { return _SomeProperty; } 
+    set { _SomeProperty = this.RaiseAndSetIfChanged(_SomeProperty, value, 
+        x => _SomeProperty, "SomeProperty");
+    }
+}
+</code>
+
+<p>Or doing this by-hand:</p>
+
+<code lang="C#">
+string _SomeProperty; 
+public string SomeProperty { 
+    get { return _SomeProperty; } 
+    set { 
+        if (_SomeProperty == value)
+            return;
+
+        _SomeProperty = value;
+        RaisePropertyChanged("SomeProperty");
+    }
+}
+</code>
+
+<p>
+How can we do this? Expression Trees! When we write <i>Expression&lt;Func&lt;T&gt;&gt;</i> as a type instead of <i>Func&lt;T&gt;</i>, instead of getting a compiled method pointer, we get an object representing the <a href="http://en.wikipedia.org/wiki/Abstract_syntax_tree">AST</a> of the lambda function. We'll use this to grep out the property name. 
+</p>
+
+<p>
+Astute readers will notice an issue - how can we correctly decide <i>T</i> so that Intellisense works correctly? If we naïvely choose 'ReactiveObject' as T, none of our properties will be defined, since they're all really defined on the derived class, not on ReactiveObject itself. To solve this, we'll use a <a href="http://en.wikipedia.org/wiki/Mixin">Mixin</a> plus a cleverly typed generic function - since the first parameter of an extension method is the type itself, the compiler will automatically bolt this on to any ReactiveObject while still treating it as the correct derived type:
+</p>
+
+<code lang="C#">
+public static class ReactiveObjectExpressionMixin
+{
+    public static TRet RaiseAndSetIfChanged[TObj, TRet](this TObj This, 
+            Expression[Func[TObj, TRet]] Property, 
+            TRet Value)
+        where TObj : ReactiveObject
+    {
+    }
+}
+</code>
+
+<h2>Some tricky caveats</h2>
+
+<p>
+It's not all biscuits and gravy though, there are a few subtle implementation details that might catch you when using this - remember though, that you can always fall back to writing it by-hand via RaisePropertyChanged, this method is solely a helper:
+</p>
+
+<ol>
+<li>You <b>must</b> name the field that backs your property as <code>_TheFieldName</code> - we use Reflection to set the backing field</li>
+<li>Writing the 'this' in 'this.RaiseAndSetIfChanged' isn't optional - otherwise the extension method won't be invoked, the old busted version will</li>
+</ol>

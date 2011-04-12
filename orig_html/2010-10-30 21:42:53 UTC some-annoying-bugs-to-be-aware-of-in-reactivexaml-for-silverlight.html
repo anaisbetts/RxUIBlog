@@ -1,0 +1,57 @@
+Some annoying bugs to be aware of in ReactiveXaml for Silverlight
+
+<p>
+Despite <a href="http://github.com/xpaulbettsx/ReactiveXaml">ReactiveXaml</a> being available for WPF, Silverlight, and Windows Phone 7, I have a confession to make: the vast majority of my use with this library is in WPF. The test suite runs under WPF, all of the applications that I am building to prototype RxXaml features are WPF applications, etc. This isn't any slight against Silverlight, it just happens to be what I'm usually working on. So, I assumed naïvely that ReactiveXaml under SL4 would "just work". 
+</p>
+
+<h2>It works now, after some fixups</h2>
+
+<p>
+After some folks messaged me about some issues in the Silverlight version, I decided to wire up the SL test runner to see if I could reproduce some of these issues. Using a great test runner called <a href="http://statlight.codeplex.com/">StatLight</a>, I could quickly see that there are some bugs. Luckily, we now run the SL unit test runner as part of the test suite, so hopefully this won't be the case any more.
+</p>
+
+<h2>List of bugs fixed as of today</h2>
+
+<ul>
+<li>ReactiveCollection failed any time someone called "coll[x] = foo"; this is because Silverlight's ObservableCollection returns different results than the desktop CLR on NotifyCollectionChangedAction.Replace</li>
+<li>Any method involving Expression Trees failed, because SL's Type.GetField doesn't appear to return any results if you pass BindingFlags to it</li>
+<li>Notifications that were supposed to come in on the UI thread were coming in on other threads - this was a dumb typo on my part</li>
+</ul>
+
+<h2>Bugs that still need fixed</h2>
+
+<ul>
+<li>To actually get the unit test runner to work, you have to rig <a href="http://github.com/xpaulbettsx/ReactiveXaml/blob/master/ReactiveXaml/Interfaces.cs#L193">this line</a> to say "return true" - I haven't yet figured out a way to determine whether we are in a unit test runner in Silverlight, since AppDomain.GetAssemblies() doesn't exist, though I've got a good idea I'll try soon.
+</li>
+</ul>
+
+<h2>An annoying caveat for SL4</h2>
+
+<p>
+On Silverlight 4, for security reasons, you cannot use Type.GetField to access private types - whereas protection on the desktop CLR is done at compile time, on SL4 this is enforced at <b>run-time</b> as well. This really sucks for RxXaml, since it uses reflection to set backing fields. The workaround is ugly, you have to mark your backing field as public, or use the simpler RaisePropertyChanged and write properties by-hand. So, here's the way for SL4 to correctly write a read-write property:
+
+<code lang="csharp">
+[IgnoreDataMember]
+public string _SearchText;
+public string SearchText {
+    get { return _SearchText; }
+    set { this.RaiseAndSetIfChanged(x => x.SearchText, value); }
+}
+</code>
+
+Alternatively, if the 'public' really annoys you, here's how to do it by-hand:
+
+<code lang="csharp">
+string _SearchText;
+public string SearchText {
+    get { return _SearchText; }
+    set {
+        if (_SearchText == value)
+            return;
+
+        _SearchText = value;
+        this.RaisePropertyChanged("SearchText");
+    }
+}
+</code>
+</p>

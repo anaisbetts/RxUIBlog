@@ -1,0 +1,182 @@
+ReactiveXaml Series: ReactiveAsyncCommand
+
+<h2>Motivation</h2>
+
+<p>
+If you've done any WPF programming that does any sort of interesting work, you know that one of the difficult things is that if you do things in an event handler that take a lot of time, like reading a large file or downloading something over a network, you will quickly find that you have a problem: during the blocking call, the UI turns black. Silverlight heads this off at the pass - you can't even do blocking operations <i>at all</i>.
+</p>
+
+<p>
+So you say, "Oh, I'll just run it on another thread!"  <i>Then</i>, you find the 2nd tricky part - WPF and Silverlight objects have <i>thread affinity</i>. Meaning, that you can only access objects <b>from the thread that created them</b>. So, at the end of the computation when you go to run <code>textBox.Text = results;</code>, you suddenly get an Exception.
+</p>
+
+<h2>Dispatcher.BeginInvoke solves this</h2>
+
+<p>
+So, once you dig around on the Internet a bit, you find out the pattern to solve this problem involves the Dispatcher:
+</p>
+
+<code lang="c#">
+void SomeUIEvent(object o, EventArgs e)
+{
+    var some_data = this.SomePropertyICanOnlyGetOnTheUIThread;
+ 
+    var t = new Task(() => {
+        var result = doSomethingInTheBackground(some_data);
+ 
+        Dispatcher.BeginInvoke(new Action(() => {
+            this.UIPropertyThatWantsTheCalculation = result;
+        }));
+    }
+ 
+    t.Start();
+}
+</code>
+
+<h2>We use this pattern a lot, let's make it more succinct</h2>
+
+<p>
+So, the idea of <code>ReactiveAsyncCommand</code> is that <i>many times</i>, when we run a command, we often are just:
+</p>
+
+<ol>
+<li>The command executes, we kick off a thread</li>
+<li>We calculate something that takes a long time</li>
+<li>We take the result, and set a property on the UI thread, using Dispatcher</li>
+</ol>
+
+<h2>Because we encapsulate the pattern, we can get other stuff for free</h2>
+
+<p>
+ReactiveAsyncCommand attempts to capture that pattern, and makes certain things easier. For example, you often only want <b>one async instance running</b>, and the Command should be disabled while we are still processing. Another common thing you would want to do is, display some sort of UI while an async action is running - something like a spinner control or a progress bar being displayed.
+</p>
+
+<p>
+Since ReactiveAsyncCommand derives from ReactiveCommand, it does everything its base class does - you can use it identically, and the Execute IObservable tells you when <i>workitems are queued.</i>. What ReactiveAsyncCommand does that would be hard to do with ReactiveCommand directly, is that it has code built-in to <b>automatically keep track of in-flight workitems.</b>
+</p>
+
+<h2>The first pattern - running an Action in the background</h2>
+
+<p>
+Here's a simple use of a Command, who will run a task in the background, and only allow one at a time (i.e. its CanExecute will return false until the action completes)
+</p>
+
+<code lang="c#">
+
+var cmd = new ReactiveAsyncCommand(null, 1 /*at a time*/);
+
+cmd.RegisterAsyncAction(i => {
+    Thread.Sleep((int)i * 1000); // Pretend to do work
+};
+
+cmd.Execute(5 /*seconds*/);
+cmd.CanExecute(5);  // False! We're still chewing on the first one.
+</code>
+
+<h2>Putting it all together</h2>
+
+<p>
+Remember, ReactiveXaml is a MVVM framework - to fully demonstrate calculating a value and displaying it in the UI, it's easiest to make a very simple MVVM application. Here's the XAML, and the basic class:
+</p>
+
+<code lang="xml">
+
+<window x:Class="RxBlogTest.MainWindow"
+        x:Name="Window" Height="350" Width="525">
+    
+    <grid DataContext="{Binding ViewModel, ElementName=Window}">
+        <stackpanel HorizontalAlignment="Center"  VerticalAlignment="Center">
+            <textblock Text="{Binding DataFromTheInternet}" FontSize="18"/>
+
+            <button Content="Click me!" Command="{Binding GetDataFromTheInternet}" 
+                    CommandParameter="5" MinWidth="75" Margin="0,6,0,0"/>
+        </stackpanel>
+    </grid>
+</window>
+
+</code>
+
+<p>And the codebehind:</p>
+
+<code lang="c#">
+using System;
+using System.Threading;
+using System.Windows;
+using ReactiveXaml;
+
+namespace RxBlogTest
+{
+    public partial class MainWindow : Window
+    {
+        public AppViewModel ViewModel { get; protected set; }
+        public MainWindow()
+        {
+            ViewModel = new AppViewModel();
+            InitializeComponent();
+        }
+    }
+
+    public class AppViewModel : ReactiveValidatedObject
+    {
+        ObservableAsPropertyHelper[string] _DataFromTheInternet;
+        public string DataFromTheInternet {
+            get { return _DataFromTheInternet.Value; }
+        }
+
+        public ReactiveAsyncCommand GetDataFromTheInternet { get; protected set; }
+    }
+}
+
+</code>
+
+<p>
+This is a simple MVVM application, whose ViewModel has two items - a Command called "GetDataFromTheInternet", and a place to store the results, a property called "DataFromTheInternet". I'll describe ObservableAsPropertyHelper later, but you can think of it as a class that "Remembers the latest value of an IObservable".
+</p>
+
+<h2>Using ReactiveAsyncCommand</h2>
+
+<p>
+The difference between RegisterAsyncAction and RegisterAsyncFunction is the <i>return value</i>. The latter function returns an IObservable representing the results that <i>will be returned</i>. For async calls, you can often think of IObservable as a <b>Future Result</b>, that is, a "promise" of a result (or an Exception if something goes pear-shaped). In this case, our IObservable represents the "output" pipeline, and will produce results every time someone fires the command, one per Execute().
+</p>
+
+<p>
+Here's how we actually implement the async function, in the ViewModel constructor.
+</p>
+
+<code lang="c#">
+public AppViewModel()
+{
+    GetDataFromTheInternet = new ReactiveAsyncCommand(null, 1 /*at a time*/);
+
+    //
+    // This function will return a "stream" of results, one per invocation
+    // of the Command
+    //
+
+    var future_data = GetDataFromTheInternet.RegisterAsyncFunction(i => {
+        Thread.Sleep(5 * 1000);	// This is a pretend async query
+        return String.Format("The Future will be {0}x as awesome!", i);
+    });
+
+    // OAPH will "watch" future_data, and raise property changes when new values
+    // come in. It'll also provide the latest result that came in.
+    _DataFromTheInternet = new ObservableAsPropertyHelper<string>(future_data,
+        x => RaisePropertyChanged("DataFromTheInternet"));
+}
+</string></code>
+
+<h2>Why is this cool?</h2>
+
+<p>
+Notice what I <i>didn't</i> have to do here: I didn't have to use any sort of explicit async mechanism like a Task or a new Thread, I didn't have to marshal data back to the UI thread using Dispatcher.BeginInvoke, and my code reads way more like a simple, single-threaded application again, instead of chaining async invocations. Stuff like this is why I'm really excited about some of the concepts in ReactiveXaml.
+</p>
+
+<p>
+Furthermore, there's something else here that's very motivating: <b>testability</b>. Using Dispatcher.BeginInvoke means that we're assuming that a Dispatcher exists and works. If you're in a unit test runner, <i>this isn't true</i>. Which means, your Commanding code if you're using other MVVM frameworks that don't handle this <i>isn't testable.</i> ReactiveXaml automatically detects whether you are in a test runner, and changes its default IScheduler to not use the Dispatcher. Test code still works, without hacking your ViewModel code at all. 
+</p>
+
+<h2>Where's the Code?</h2>
+
+<p>
+Get the code here: <a href="http://paulbetts.org/blog_samples/ReactiveAsyncCmd.zip">ReactiveAsyncCmd.zip</a>. Also, I'm too lazy to correct the typo in the namespace, bt it doesn't matter. Thoughts? Comments? Ideas?
+</p>

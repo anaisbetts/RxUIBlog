@@ -1,0 +1,40 @@
+WCF.AsParallel() using ReactiveUI and Rx.NET
+
+<h2>Select.AsParallel() for the Web</h2>
+
+<p>
+I've mentioned it before, but SelectMany is the secret to using web services. Check out <a href="http://blog.paulbetts.org/index.php/2010/09/26/calling-web-services-in-silverlight-using-reactivexaml/">this previous article on Web Services</a> if you're new to using SelectMany with web services. Here's the easy way to understand it in two lines, in terms of PowerShell / *nix pipes:
+</p>
+
+<p>
+<script src="https://gist.github.com/816011.js?file=gistfile1.cs"></script>
+</p>
+
+<p>
+The cool thing about Rx.NET is that it makes it easy to write completely non-blocking calls a-la node.js. If you've ever used the <i>BeginXXXX/EndXXXX</i> calls, you know that it's not particularly easy to use once you get into more complex examples, but that's one of the advantages of Rx.NET - being able to take a bunch of asynchronous operations and sews them together in a sane way. It's easy to write, but what actually <i>happens</i> when we run it?  Let's see what code runs where:
+</p>
+
+<p align="center">
+<img src="http://blog.paulbetts.org/wp-photos/SelectMany.png"/><br />
+</p>
+
+<h2>It's easy to be <i>way</i> too parallel</h2>
+
+<p>
+Non-blocking web service calls take almost no time to execute - this is one of its big advantages, but it also means we can go through the input array really quickly. In effect, this means that if we have an array with 100 elements, <b>we will end up issuing 100 WCF requests at the same time!</b>
+</p>
+
+<p>
+Not only is this not friendly to the web server on the other end, it isn't possible - WCF will throttle your requests to 5 concurrent requests by default, and fail the rest. We need a way to keep a "pending queue", run a few at a time, and when each one completes, pull a few more from the pending queue.
+</p>
+
+<h2>CachedSelectMany throttles concurrency</h2>
+
+<p>
+Let's see how the diagram looks like when we use <code>CachedSelectMany</code> instead of SelectMany - from a code standpoint, CachedSelectMany can simply be substituted in places where you use SelectMany with a web service. CachedSelectMany internally uses a class called ObservableAsyncMRUCache to manage concurrency. Despite the fact that calls can be queued, your code doesn't actually wait - you just won't be called back until the call completes.
+</p>
+
+<p align="center">
+<img src="http://blog.paulbetts.org/wp-photos/CachedSelectMany.png"/><br />
+<i>Bar has to wait in line before it can run</i>
+</p>

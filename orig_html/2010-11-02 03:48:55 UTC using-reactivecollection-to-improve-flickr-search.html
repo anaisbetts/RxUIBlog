@@ -1,0 +1,107 @@
+ReactiveXaml Series: Using ReactiveCollection to improve the Flickr Search sample
+
+<p>
+One of the types <a href="http://blog.paulbetts.org/index.php/2010/10/30/reactivexaml-1-4-0-0-is-released-including-samples-and-binaries/">in ReactiveXaml</a> that is quite useful that I haven't mentioned before on the blog is an extension of WPF/SL's ObservableCollection (no relation to IObservable), called (predictably enough), <code>ReactiveCollection</code>. It works wherever you'd use an ObservableCollection in a traditional M-V-VM library, but it has a few useful tricks worth mentioning.
+</p>
+
+<h2>The basics, plus watching item change notifications</h2>
+
+<p>
+As you might imagine, ReactiveCollection adds the following IObservables that you can subscribe to:
+
+<ul>
+<li>BeforeItemsAdded / ItemsAdded</li>
+<li>BeforeItemsRemoved / ItemsRemoved</li>
+<li>CollectionCountChanging / CollectionCountChanged</li>
+</ul>
+
+</p>
+
+<p>
+In addition to this, ReactiveCollection can also watch item change notifications on the items in the list, so you can express "Tell me when the collection itself changes, <i>or any of its elements</i>". This can be expensive for large lists, so it is disabled by default - use the ChangeTrackingEnabled property to enable/disable it. As you add/remove items, ReactiveCollection will be subscribing/unsubscribing to the underlying objects.
+</p>
+
+<h2>Automatically creating ViewModel collections</h2>
+
+<p>
+Since we now have information easily exposed about when items are added/removed, it was fairly straightforward to create a Collection who automatically follows another Collection via a Selector, called "CreateDerivedCollection". Here's the most useful case:
+
+<code lang="c">
+var Models = new ReactiveCollection[ModelClass]();
+var ViewModels = Models.CreateDerivedCollection(x => new ViewModelForModelClass(x));
+
+// Now, adding / removing Models means we 
+// automatically have a corresponding ViewModel
+Models.Add(new Model("Hello!"));
+
+ViewModels.Count();
+>>> 1
+</code>
+
+</p>
+
+<p>
+This really makes it easier follow the M-V-VM pattern properly when it comes to collections - the code is editing the Models, and these new Models are being projected into new ViewModels automatically.
+</p>
+
+<h2>Creating a collection from an Observable</h2>
+
+<p>
+A post-1.4 method called CreateCollection that I recently added will also allow you to create a list based on an Observable, optionally spacing each of the items apart by a certain amount of time. If the time is specified, the list returned is always empty, but slowly fills itself over time - this is great for populating Listboxes in a more lifelike way. We'll see this in action in the sample.
+</p>
+
+<h2>Improving our Flickr search sample</h2>
+
+<p>
+In the <a href="http://blog.paulbetts.org/index.php/2010/07/05/reactivexaml-series-implementing-search-with-observableaspropertyhelper/">sample for ObservableAsPropertyHelper</a>, I showed how to implement a simple Flickr tag search. Using CreateCollection, we can make the tiles appear on a delay which looks snazzier.
+</p>
+
+<p align="center">
+    <a href="http://www.paulbetts.org/blog_samples/ReactiveCollectionSample.zip">
+    <img src="http://blog.paulbetts.org/wp-photos/OAPHSample.png" /><br />
+    </a>
+    <i>Animations don't show up well as images. Click to download the sample project with binaries.</i>
+</p>
+
+<p>
+Let's take a look at what changed - first, we changed our output results from a List to a ReactiveCollection:
+
+<code lang="c">
+ObservableAsPropertyHelper[ReactiveCollection[FlickrPhoto]] _Photos;
+public ReactiveCollection[FlickrPhoto] Photos {
+    get { return _Photos.Value; }
+}
+</code>
+
+</p><p>
+Next, we update GetSearchResultsFromFlickr to provide a ReactiveCollection instead of a List, really only by changing the first and last lines:
+
+<code lang="c">
+public static ReactiveCollection[FlickrPhoto] GetSearchResultsFromFlickr(string search_term)
+{
+    /* [[[SNIP]]] This part is long and boring */
+
+    var ret = items.Zip(urls, (item, url) => 
+        { item.Url = url; return item; }).ToList();
+
+    // Take the return list, convert it to an Observable, 
+    // then create a collection who will initially be
+    // empty, but we'll copy one item at a time every
+    // 250ms until we've copied everything from ret.
+    return ret.ToObservable().CreateCollection(TimeSpan.FromMilliseconds(250.0));
+}
+
+</code>
+</p>
+
+<h2>Making it even snazzier - adding the fade-in</h2>
+
+<p>
+Adding the items every 250ms is okay, but to really make this look great we need an animation to fire whenever an item is added. To do this, we override the ListBoxItemContainer template, and make these changes (this has nothing to do with ReactiveXaml directly, but it's a cool trick nevertheless):
+
+<ol>
+<li>Make a copy of the ListBoxItemContainer template</li>
+<li>Set the Border opacity to zero (its initial state)</li>
+<li>Create a Storyboard which will animate the opacity back to 100% in 1.5 seconds (using the Power easing function)</li>
+<li>Add an Expression Blend EventTrigger on the Loaded event, that will kick off our Storyboard</li>
+</ol></p>

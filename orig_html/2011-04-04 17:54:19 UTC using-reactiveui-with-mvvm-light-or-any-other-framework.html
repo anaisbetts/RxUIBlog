@@ -1,0 +1,80 @@
+Using ReactiveUI with MVVM Light (or any other framework!)
+
+<h2>ReactiveUI: Is it All or None?</h2>
+
+<p>
+No! RxUI provides all of the core components that you need to use the M-V-VM pattern, but many people already have applications written using some of the other great .NET MVVM frameworks, such as MVVM Light or Caliburn.Micro - rewriting an entire codebase just to use Rx is a total bummer.
+</p>
+
+<p>
+Fortunately, in ReactiveUI 2.2, there have been several features introduced in order to make using RxUI with existing frameworks easier - you can try out RxUI on a per-page basis, instead of rewriting your whole app.
+</p>
+
+<p>
+There are really three core bits that are central to MVVM: a ViewModel object, an ICommand implementation, and a change-notifying Collection. Let's take a look at how we can Rx'ify these three items.
+</p>
+
+<h2>Using MVVM Light alongside ReactiveUI</h2>
+
+<p>
+First, <b>File-&gt;New Project</b> and create a new "MVVM Light" projects via the template. Then via NuGet (you are using NuGet, right?), add a reference to the "ReactiveUI" project. Now, crack open MainViewModel.cs. The <strong>critical</strong> thing to know is, <i>all of RxUI's awesomeness are extensions onto an interface called IReactiveNotifyPropertyChanged</i>. Ergo, we need to make MainViewModel implement this. But don't panic, it's easy!
+</p>
+
+<p>
+<b>Step 1:</b> Change the class definition to implement IReactiveNotifyPropertyChanged.
+</p>
+
+<code lang="csharp">
+public class MainViewModel : ViewModelBase, IReactiveNotifyPropertyChanged
+</code>
+
+<p>
+<b>Step 2:</b> Add a field of type "MakeObjectReactiveHelper", and initialize it in the constructor:
+</p>
+
+<code lang="csharp">
+MakeObjectReactiveHelper _reactiveHelper;
+
+public MainViewModel()
+{
+    _reactiveHelper = new MakeObjectReactiveHelper(this);
+    /* More stuff */
+}
+</code>
+
+<p>
+<b>Step 3:</b> Paste in the following code at the end of your class, which just uses _reactiveHelper to implement the entire interface:
+</p>
+
+<p>
+<script src="https://gist.github.com/902612.js?file=gistfile1.cs"></script>
+</p>
+
+<h2>An important caveat about MakeObjectReactiveHelper</h2>
+
+<p>
+One thing that probably won't affect you, but it might: MakeObjectReactiveHelper doesn't properly completely implement IReactiveNotifyPropertyChanged unless you are also implementing INotifyPropertyChang<b>ing</b> - most ViewModel implementations don't (in fact, the interface doesn't even exist in Silverlight or WP7). This means that in certain circumstances when you use the WhenAny or ObservableForProperty with a deep path (i.e. x.Foo.Bar.Baz), you may get duplicate notifications. In practice, this usually isn't a big deal.
+</p>
+
+<h2>Watching ObservableCollections to create ViewModel collections</h2>
+
+<p>
+With RxUI 2.2, you can easily create a collection which tracks an existing collection, even if the source is an ObservableCollection. Here's the syntax:
+</p>
+
+<p>
+<script src="https://gist.github.com/902622.js?file=gistfile1.cs"></script>
+</p>
+
+<h2>Creating ReactiveCommands like RelayCommands</h2>
+
+<p>
+Unfortunately, the story for ICommand isn't as easy, you have to wrap commands one-at-a-time in order to subscribe to them. Here's how to do it:
+</p>
+
+<code lang="csharp">
+public static ReactiveCommand WrapCommand(ICommand cmd)
+{
+    return ReactiveCommand.Create(cmd.CanExecute, cmd.Execute);
+}
+</code>

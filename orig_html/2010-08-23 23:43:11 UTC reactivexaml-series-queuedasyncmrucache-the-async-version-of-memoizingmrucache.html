@@ -1,0 +1,39 @@
+ReactiveXaml Series: QueuedAsyncMRUCache - the async version of MemoizingMRUCache
+
+
+<h2>A thread-safe, asynchronous MemoizingMRUCache</h2>
+
+<p>
+As we saw <a href="http://blog.paulbetts.org/index.php/2010/07/13/reactivexaml-series-using-memoizingmrucache/">in a previous entry</a>, MemoizingMRUCache is great for certain scenarios where we want to cache results of expensive calculations, but one disadvantage is that it is fundamentally a single-threaded data structure: accessing it from multiple threads, or trying to cache the results of several in-flight web requests at the same time would result in corruption. QueuedAsyncMRUCache solves all of these issues, as well as gives us a new method called <code>AsyncGet</code>, which returns an IObservable. This IObservable will fire exactly once, when the async command returns. 
+</p>
+
+<p>
+What places would I actually want to use this class? Here's a motivating example: you're writing a Twitter client, and you need to fetch the profile icon for each message - a naive foreach loop would be really slow, and even if you happened to write it in an asynchronous fashion, you would <i>still</i> end up fetching the same image potentially many times! 
+</p>
+
+<h2>Using IObservable as a Future</h2>
+
+<p>
+One of the things that an IObservable encapsulates is the idea of a <a href="http://en.wikipedia.org/wiki/Future_(programming)">Future</a>, described simply as the future result of an asynchronous operation. The pattern is implemented via an IObservable that only produces one element then completes. Using IObservable as a Future provides a few handy things:
+
+<ul>
+<li>IObservables let us block on the result if we want, via Observable.First().</li>
+<li>IObservables have built-in error handling via OnError, so we can also handle the case where something goes pear-shaped.</li>
+<li>We can easily group several IObservables together via Observable.Merge and wait for any (or all) of them.</li>
+</ul>
+
+</p>
+
+<h2>A difficult problem - preventing concurrent identical requests</h2>
+
+<p>
+Furthermore, QueuedAsyncMRUCache solves a tricky problem as well: let's revisit the previous example. As we walk the list of messages, we will asynchronously issue WebRequests. Imagine a message list where every message is from the same user:
+</p>
+
+<p>
+For the first item, we'll issue the WebRequest since the cache is empty. Then, we'll go to the 2nd item - since the first request probably hasn't completed, we'll <i>issue the same request again</i>. If you had 50 messages and the main thread was fast enough, you could end up with 50 WebRequests <b>for the same file!</b>
+</p>
+
+<p>
+What <i>should</i> happen? When the 2nd call to AsyncGet occurs, we need to check the cache, but we also need to check the list of outstanding requests. Really, for every possible input, you can think of it being in one of three states: either in-cache, in-flight, or brand new. QueuedAsyncMRUCache ensures (through a lot of code!) that all three cases are handled correctly, in a thread-safe manner.
+</p>

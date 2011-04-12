@@ -1,0 +1,58 @@
+ReactiveXaml Series: Displaying a 'Loading...' value
+
+<p>
+Some folks from the <a href="http://nroute.codeplex.com/Thread/View.aspx?ThreadId=227771">nRoute Framework</a> were looking for an elegant way to handle displaying an intermediate value during async updates - something like changing the text to say "Working..." until the task is complete, then displaying the results. I realized this was pretty easy to do with <a href="http://bit.ly/rxxaml">ReactiveXaml</a>, so I wrote up some code - here it is:
+</p>
+
+<code lang="C#">
+public class CoolViewModel : ReactiveObject
+{
+    //
+    // Standard way in RxXaml to declare a notification-enabled property
+    // 
+
+    string _InputData;
+    public string InputData {
+        get { return _InputData; }
+        set { this.RaiseAndSetIfChanged(x => x.InputData, value); }
+    }
+
+    // Our ICommand - invoking this will *begin* the async operation
+    ReactiveAsyncCommand DoubleTheString;
+
+    //
+    // OAPH will create an 'output' property - that is, a property who will 
+    // be updated via an IObservable
+    // 
+
+    ObservableAsPropertyHelper[string] _OutputData;
+    public string OutputData {
+        get { return _OutputData.Value; }
+    }
+
+    public CoolViewModel(Window MainWindow)
+    {
+        DoubleTheString = new ReactiveAsyncCommand(null, 1/*at a time*/);
+
+        IObservable[string] doubled_strings = DoubleTheString.RegisterAsyncFunc(x => {
+            // Pretend to be a slow function
+            Thread.Sleep(1000);
+            return String.Format("{0}{0}", x);
+        });
+
+        //
+        // ReactiveAsyncCommand will fire its OnNext when the command is *invoked*,
+        // and doubled_strings will fire when the command *completes* - let's use
+        // this to our advantage:
+        //
+
+        IObservable[string] result_or_loading = Observable.Merge(
+            DoubleTheString.Select(x => "Loading..."),
+            doubled_strings
+        );
+
+        // Hook up our new 'result_or_loading' to the output
+        _OutputData = this.ObservableToProperty(result_or_loading, x => x.OutputData);
+    }
+}
+</code>

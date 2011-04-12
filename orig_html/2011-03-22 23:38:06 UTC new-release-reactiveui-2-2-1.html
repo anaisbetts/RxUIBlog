@@ -1,0 +1,39 @@
+New Release: ReactiveUI 2.2.1
+
+<h2>What does ReactiveUI do?</h2>
+
+<p>
+<a href="http://www.reactiveui.net">ReactiveUI</a> is a M-V-VM framework like MVVM Light or Caliburn.Micro, that is deeply integrated with the Reactive Extensions for .NET. This allows you to write code in your ViewModel that is far more elegant and terse when expressing complex stateful interactions, as well as much simpler handling of async operations.
+</p>
+
+<h2>ReactiveUI on Hanselminutes</h2>
+
+<p>
+Check out <a href="http://hanselminutes.com/default.aspx?showID=271">the recent Hanselminutes episode about the Reactive Extensions</a> as well if you've got more time. Scott and I chat about some of the ideas in RxUI and how we can take the ideas in the Reactive Extensions and use RxUI to apply them to Silverlight and WPF apps.
+</p>
+
+<h2>What's New in ReactiveUI 2.2.1 - Now with 100% less Windows Phone crashes</h2>
+
+<p>
+This release is just a maintenance release - if you don't currently have any issues with RxUI, there is no reason to upgrade. However, there are two major fixes that were worth creating a new release for:
+</p>
+
+<ul>
+<li><b>.NET 4.0 Client Profile</b> - by including System.Reactive.Testing into ReactiveUI.dll, we broke everyone using the Client profile with WPF. This is now fixed and future versions of RxUI will be built against the Client profile.</li>
+<li><b>WP7 Crashes</b> - if you tried to use RxUI with WP7, you would receive a TypeLoadException whenever a type was instantiated, or possibly a XamlParseException telling you something to the effect of "MainWindow class does not exist". This issue is now fixed!</li>
+</ul>
+
+<h2>Breaking Change: Introducing ReactiveUI.Testing</h2>
+<p>
+To facilitate fixing the first bug above, a new Assembly / NuGet package has been introduced, "ReactiveUI.Testing.dll / ReactiveUI-Testing" - this was originally in ReactiveUI Core, and the libraries here help you write better unit tests for your applications (similar to Rx's System.Reactive.Testing). As a result of this, you may need to add an extra package / library reference to your project when you upgrade to 2.2.1. 
+</p>
+
+<h2>Where can I find the library?</h2>
+
+<p>
+On <a href="http://nuget.org">NuGet</a>! The best way to install ReactiveUI for a project is by installing the <a href="http://nuget.org/Packages/Packages/Details/reactiveui-2-2-1-0">ReactiveUI package</a> for WPF/Silverlight projects, or <a href="http://nuget.org/Packages/Packages/Details/reactiveui-wp7-2-2-1-0">ReactiveUI-WP7</a> for Windows Phone 7 projects.
+</p>
+
+<p>
+If NuGet isn't your thing, you can also find the binaries on the Github page: <a href="https://github.com/downloads/xpaulbettsx/ReactiveUI/ReactiveUI%202.2.1.0.zip">ReactiveUI 2.2.1.0.zip</a>.
+</p>

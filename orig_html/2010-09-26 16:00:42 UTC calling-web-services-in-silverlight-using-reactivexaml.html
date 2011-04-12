@@ -1,0 +1,129 @@
+Calling Web Services in Silverlight using ReactiveXaml
+
+<p>
+One of the scenarios that our summer intern <a href="http://virtualdreams.com.br/blog/">Roberto Sonnino</a> pointed out over the summer that was somewhat annoying in <a href="http://bit.ly/reactivexaml">ReactiveXaml</a> (my MVVM library that integrates the Reactive Extensions for .NET), was making RxXaml more friendly to asynchronous web service calls in Silverlight. Since this is a pretty important scenario, I decided to hack on it some (it's always been possible, just not as easy).
+</p>
+
+<h2>Getting our function prototype correct</h2>
+
+<p>
+Remember from <a href="http://blog.paulbetts.org/index.php/2010/08/23/reactivexaml-series-queuedasyncmrucache-the-async-version-of-memoizingmrucache/">an earlier post</a> that an IObservable can be used as a Future, a "box" that will eventually contain the result of a web service call or other asynchronous function, or the error information. So to this end, we'd really like our web service calls to all be vaguely of the form:
+</p>
+
+<code lang="C#">
+
+IObservable[Something] CoolWebServiceCall(object Param1, object Param2 /*etc*/);
+
+</code>
+
+<p>
+However, we know that neither HttpWebRequest nor the web service generated code looks <i>anything</i> like that. Normal Silverlight objects use an OnCompleted event to fire a callback once the call completes. The Rx framework designers saw this coming however, and gave us a pretty handy function to deal with it: <code>Observable.FromAsyncPattern()</code>. This function will take a BeginXXXX/EndXXXX pair that follows the <a href="http://msdn.microsoft.com/en-us/library/ms228963.aspx">.NET Asynchronous Pattern</a> and in return, will give us a Func that follows the form above, without us having to write some boilerplate code to connect the async method to an IObservable. 
+</p>
+
+<h2>An example: looking at the Bing Translation API</h2>
+
+<p>
+One of the most simple public web services is the <a href="http://msdn.microsoft.com/en-us/library/ff512435.aspx">Bing Translation API</a>, so its Translate() method is a good candidate for our example. The synchronous signature is:
+</p>
+
+<code lang="C#">
+string Client.Translate(string appId, string text, string fromLang, string toLang);
+</code>
+
+<p>
+Here's how we could take this and turn it into an Rx-friendly Async function - don't be scared off by the five template parameters, they're just the types of the parameters and return value, in the same order as a Func&lt;T&gt;:
+</p>
+
+<code lang="C#">
+
+var client = new LanguageServiceClient();
+var translate_func = Observable.FromAsyncPattern[string,string,string,string,string]
+    (client.BeginTranslate, client.EndTranslate);
+
+IObservable[string] future = translate_func(appId, "Hello World!", "en", "de");
+string result = future.First();   // This will *wait* until the call returns!!
+>>> "Guten Tag, Welt!"
+
+//
+// Let's try with an array...
+//
+
+var input = new[] {"one", "two", "three"};
+
+// Fire off three asynchronous web service calls at the same time
+var future_items = input.ToObservable()
+    .SelectMany(x => translate_func(appId, x, "en", "fr"));
+
+// This waits for *all* the web service calls to return
+string[] result_array = future_items.ToArray();  
+>>> ["un", "deux", "trois"]
+
+</code>
+
+<h2>An important note for Silverlight!</h2>
+
+<p>
+Silverlight's web service generated client code does something a bit annoying - it <b>hides away</b> the BeginXXXX/EndXXXX calls, presumably to make the Intellisense cleaner. However, they're not gone, the way you can get them back is by casting the MyCoolServiceClient object <b>to its underlying interface</b> (i.e. the LanguageServiceClient object has a generated ILanguageServiceClient interface that it implements)
+</p>
+
+<h2>Turning this into a Command</h2>
+
+<p>
+Once we've got the function, turning it into a command is easy via <a href="http://github.com/xpaulbettsx/ReactiveXaml/commit/1c22a7df2fec043e51b417ef6802541420f319a6">a new method </a> introduced to <a href="http://blog.paulbetts.org/index.php/2010/06/27/reactivexaml-series-reactiveasynccommand/">ReactiveAsyncCommand</a> - <code>RegisterObservableAsyncFunction</code>. This method is almost identical to RegisterAsyncFunction, but instead of expecting a synchronous Func which will be run on the <a href="http://msdn.microsoft.com/en-us/library/dd460717.aspx">TPL Task pool</a>, it expects a Func that returns an IObservable as described above. Here's a simple example of a good ViewModel object that demonstrates this:
+</p>
+
+<code lang="C#">
+
+public class TranslateViewModel : ReactiveObject
+{
+    //
+    // Input text
+    // 
+
+    string _TextToTranslate;
+    public string TextToTranslate {
+        get { return _TextToTranslate; }
+        set { RaiseAndSetIfChanged(x => x.TextToTranslate, value); }
+    }
+
+    //
+    // The "output" property we bind to in the UI
+    //
+
+    ObservableAsPropertyHelper[string] _TranslatedText;
+    public string TranslatedText {
+        get { return _TranslatedText.Value; }
+    }
+
+    public ReactiveAsyncCommand DoTranslate { get; protected set; }
+
+    const string appId = "Get your own, buddy!";
+    public TranslateViewModel()
+    {
+        var client = new LanguageServiceClient();
+        var translate_func = Observable.FromAsyncPattern[string,string,string,string,string](
+                client.BeginTranslate, client.EndTranslate);
+
+        // Only one web call at a time please!
+        DoTranslate = new ReactiveAsyncCommand(null, 1);
+
+        //
+        // 'x' is the CommandParameter passed in, which we will use as the
+        // source text
+        //
+
+        var results = DoTranslate.RegisterObservableAsyncFunction(
+            x => translate_func(appId, (string)x, "en", "de"));
+            
+        _TranslatedText = this.ObservableToProperty(
+            results, x => x.TranslatedText);
+    }
+}
+
+</code>
+
+<h2>What does that get us?</h2>
+
+<p>
+Let's review what this fairly short, readable code gets us - using a few simple bindings, we'll have a fully non-blocking, responsive UI that correctly handles a lot of the edge cases associated with background operations: greying out the Button attached to the Command while the web call is running, saving off the results, then notifying the UI that there is something new to display so that it updates instantly, without any tricky callbacks or mutable state variables that have to be guarded by Lock statements to ensure multithreaded safety. That's pretty cool. 
+</p>

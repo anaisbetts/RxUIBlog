@@ -1,0 +1,78 @@
+Testing your ViewModels using Time Travel and ReactiveUI
+
+<h2>Testing asynchronous ViewModel interactions is tough</h2>
+
+<p>
+When running under a unit test runner, ReactiveUI makes it fairly straightforward to test interactions between commands and changing properties. Fiddle with properties, execute the commands, Assert what happens - done!
+</p>
+
+<p>
+However, most non-trivial programs need to run something in the background - talk to a web service, calculate something in the background, etc. Testing this can be way more challenging, since it is easy to deadlock yourself with the Immediate scheduler (the one used by-default in a unit test) - when it comes down to it, there is exactly <b>one</b> thread, and it can't be doing <b>two+</b> things at a time. This will typically come into play when you use a blocking call like <i>First()</i>, then find out your test runner never finishes. In a non-Rx context, we typically try to test this via Thread.Sleep() calls or Waits, which are really slow and often give you really unpredictable results.
+</p>
+
+<h2>Using EventScheduler in a pinch</h2>
+
+<p>
+What we need, is a replacement for RxApp.DeferredScheduler that is actually <i>deferred</i>, to take the place of WPF/Silverlight's Dispatcher. Enter EventLoopScheduler!  We can use this to create a "pretend" Dispatcher on-the-fly that we control:
+</p>
+
+<p align="center">
+<script src="https://gist.github.com/784070.js?file=gistfile1.cs"> </script>
+</p>
+
+<p>
+This is alright, but it still will slow down our test suite by quite a bit, waiting for network access. What's worse, if we were testing something more complicated, we could get tests that pass sometimes but not others, depending on the timing - this is a huge time sink for QA folks who have to then debug the test failures.
+</p>
+
+<h2>Testing software via Time Travel?!</h2>
+
+<p>
+The guys from DevLabs came up with a pretty ingenious way to solve this. Let's look at the definition of IScheduler, the interface through which we send all of our deferred processing:
+</p>
+
+<p align="center">
+<script src="https://gist.github.com/784072.js?file=gistfile1.cs"></script>
+</p>
+
+<p>
+So, we can schedule code to run right now, we can schedule it to run after a certain amount of time has elapsed, and then there's that third member: Now. You might ask, "Why do I need to know Now, don't I get it from DateTime.Now?" Here's the clever bit:  <i>What if you made a scheduler where Now was settable?</i> This scheduler would never run anything, just queue it to a list of stuff to run. Then, when "Now" is set (i.e. we "move through time"), we activate anything that <i>would have run</i> in that time period.
+</p>
+
+<h2>How does the TestScheduler work?</h2>
+
+<p>
+In fact, this is <i>exactly</i> how TestScheduler works. When Rx operators call Schedule(), nothing happens. Then, TestScheduler has two interesting methods, <b>Run()</b>, which will run all of the queued items (i.e. execute anything that it can), and <b>RunToMilliseconds()</b>, which lets you travel to a certain time period <i>n</i> milliseconds away from <i>t=0</i>.
+</p>
+
+<h2>Faking out an asynchronous web call</h2>
+
+<p>
+Sounds great, right? Here's the caveat about TestScheduler though - if you use any other asynchronous methods like Event or Task.Wait(), it'll be tougher to integrate TestScheduler, since not all sources of async'ness are going through the TestScheduler. However, if you're using Rx in a project, I consider using other sync/thread patterns to be an Rx Code Smell - like casting IEnumerables in LINQ to Array because I happen to know it's an Array.
+</p>
+
+<p>
+Let's see how we can create a fake async Read method, that will simulate taking up some time and returning a result:
+</p>
+
+<p align="center">
+<script src="https://gist.github.com/784075.js?file=gistfile1.cs"></script>
+</p>
+
+<p>
+The cool thing about this mock, is that if you used it in a normal environment or under an EventLoopScheduler, it'd do exactly as it said: wait 10 seconds, then return that array. Under the TestScheduler, we'll make it return <b>immediately</b>!
+</p>
+
+<h2>Writing the Unit Test</h2>
+
+<p>
+Here's how we could write the Unit Test above to execute instantly using TestScheduler (actually fleshing out the MyCoolViewModel so you can see how it's wired up). Inverting the control to actually get the mock function here is pretty ugly, there are certainly better ways to go about it.
+</p>
+
+<p align="center">
+<script src="https://gist.github.com/784076.js?file=gistfile1.cs"></script>
+</p>
+
+<h2>Cool, right??</h2>
+<p>
+Okay, well maybe not <i>cool</i>, but learning about this definitely helped the ReactiveUI unit tests themselves become much more reliable and run way faster once I rewrote them to take advantage of TestScheduler - those Sleeps really add up!  If you want to learn more about TestScheduler, Wes Dyer and Jeffrey Van Gogh from the Rx team talk about it in-depth here: <a href="http://channel9.msdn.com/Shows/Going+Deep/Wes-Dyer-and-Jeffrey-Van-Gogh-Inside-Rx-Virtual-Time">Wes Dyer and Jeffrey Van Gogh: Rx Virtual Time</a>
+</p>

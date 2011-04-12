@@ -1,0 +1,63 @@
+ReactiveXaml series: ReactiveObject, and why Rx is awesome
+
+<h2>ViewModels via ReactiveObject</h2>
+
+<p>
+Like any other MVVM framework, <a href="http://github.com/xpaulbettsx/ReactiveXaml">ReactiveXaml</a> has an object designed as a ViewModel class. This object is based on Josh Smith's ObservableObject implementation in <a href="http://mvvmfoundation.codeplex.com/">MVVM Foundation</a> (actually, many of the classes' inspiration come from MVVM Foundation, Josh does awesome work!). The Reactive version as you can imagine, implements INotifyPropertyChanged as well as IObservable so that you can subscribe to object property changes.
+</p>
+
+<h2>Other things that are nice to have</h2>
+
+<p>
+ReactiveObject also does a few nice things for you: first, when you compile ReactiveXaml in Debug mode, it will print debug messages using its logging framework whenever a property changes. Another example is, implementing the standard pattern of a property that raises the changed event is a few lines shorter:
+
+<code lang="C#">
+
+int _someProp;
+public int SomeProp {
+    get { return _someProp; }
+    set { this.RaiseAndSetIfChanged(x => x.SomeProp, value);}
+}
+
+</code>
+</p>
+
+<p>Compared to the traditional implementation which is a few lines longer:
+
+<code lang="C#">
+
+int _someProp;
+public int SomeProp {
+    get { return _someProp; }
+    set {
+        if (_someProp == value)
+            return;
+        _someProp = value;
+        RaisePropertyChanged("SomeProp");
+    }
+}
+
+</code>
+
+</p>
+
+
+<h2>Some philosophy</h2>
+
+<p>
+A lot of examples of the Reactive Extensions make its domain appear really constrained, like the only thing it's ever useful for is either handing web service requests and implementing drag-and-drop. However, here's the key thing to realize - <b>a property change notification is an event.</b> Once you realize that Reactive Programming applies to any time an object changes state, Rx suddenly becomes far more applicable to any programming domain - really, Rx is a library to model state machines that are context-free with respect to threading.
+</p>
+
+<h2>Abstracting away context is critical for a multicore + cloud world</h2>
+
+<p>
+What do I mean by "context-free"?  Well, just as LINQ abstracts away the idea of a for loop into these operations like "Select" and "Where", where the <i>implementation</i> is separate from the <i>semantics</i>, Rx does the same thing. When you call Where() on an IEnumerable, the default implementation is a simple loop - but add an .AsParallel(), and suddenly the same code is now running on multiple cores. Use Dryad, and the same code is running on multiple machines in an HPC cluster.
+</p>
+
+<p>
+In traditional imperative programming, we are always <b>explicit</b> about the thread context in which we were running in - to put work on another thread, we had to call <code>new Thread()</code>. The really interesting thing about Rx, and the reason that Rx is made by the "Cloud Programmability Group" inside MS, is that Rx is <i>also</i> an abstraction above context - in Rx, you usually <i>don't care</i> what thread you're running on, and you only have to specify it when you <i>explicitly do care</i> via ObserveOn (like to deal with WPF's thread affinity). Observables are essentially a way to declaratively write dependencies between incoming data sources without explicitly specifying the <b>mechanism</b> of their synchronization, only their <b>semantics</b>.
+</p>
+
+<p>
+Do you see where I'm going with this? If the concept of "Lock" and "Thread" are no longer concretely tied to a kernel thread and a Critical Section, this means that you can write the same Rx code, and go from a single thread, event-based model with no locks, to a multicore model that synchronizes via locking, to a cluster of computers in a lab which synchronize via a message-passing model, to a giant cloud computing array that synchronizes via a service bus. <b>I think that's awesome.</b> 
+</p>

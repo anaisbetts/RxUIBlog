@@ -1,0 +1,60 @@
+ReactiveXaml series: Using MemoizingMRUCache
+
+<h2>Memoization and Caching</h2>
+
+<p>
+One thing that is useful in any kind of programming is having a look-up table so that you don't have to spend expensive calls to fetch the same data that you just had recently, since fetching the data and passing it around via parameters often gets ugly. A better way is to use a cache - store values we've fetched recently and reuse them. So, a naïve approach would be to store the data off in a simple Dictionary. This might work for awhile, but you soon realize as Raymond Chen says, "Every cache has a cache policy, whether you know it or not."  In the case of a Dictionary, the policy is unbounded - an unbounded cache is a synonym for 'memory leak'.
+</p>
+
+<p>
+To this end, one of the things that comes with ReactiveXaml is a class called <code>MemoizingMRUCache</code>. As its name implies, it is a <i>most recently used</i> cache - we'll throw away items whose keys haven't been requested in awhile; we'll keep a fixed limit of items in the cache, unlike other approaches involving WeakReference that keep references to items only if they're used on some other thread at the time. Since most desktop / Silverlight applications aren't so massively multithreaded as a web application, using a WeakReference approach means we'll just get constant cache misses.
+</p>
+
+<h2>Using MemoizingMRUCache</h2>
+
+<p>
+Really when it comes down to it, you can just think of MemoizingMRUCache as just a proxy for a function - when you call <code>Get</code>, it's going to invoke the function you provided in the constructor. One thing that's important to understand with this class, is that your function must be a function <i>in the mathematical sense</i> - i.e. the return value for a given parameter <b>must</b> always be identical. Another thing to remember is that this class <b>is not implicitly thread-safe</b> - unlike QueuedAsyncMRUCache, if you use it from multiple threads, you have to protect it via a lock just like a Dictionary or a List.
+</p>
+
+<p>
+Here's a motivating sample:
+</p>
+
+<code lang="C#">
+
+// Here, we're giving it our "calculate" function - the 'ctx' variable is 
+// just an optional parameter that you can pass on a call to Get.
+var cache = new MemoizingMRUCache[int, int]((x, ctx) => {
+    Thread.Sleep(5*1000);     // Pretend this calculation isn't cheap
+    return x * 100;
+}, 20 /*items to remember*/);
+
+// First invocation, it'll take 5 seconds
+cache.Get(10);
+>>> 1000 
+
+// This returns instantly
+cache.Get(10);
+>>> 1000 
+
+// This takes 5 seconds too
+cache.Get(15);
+>>> 1500
+
+</code>
+
+<h2>Maintaining an on-disk cache</h2>
+
+<p>
+MemoizingMRUCache also has a feature that comes in handy in certain scenarios: when a memoized value is evicted from the cache because it hasn't been used in awhile, you can have a function be executed with that value. This means that MemoizingMRUCache can be used to maintain on-disk caches - your Key could be a website URL, and the Value will be a path to the temporary file. Your OnRelease function will delete the file on the disk since it's no longer in-use.
+</p>
+
+<h2>Some other useful functions</h2>
+
+<p>
+<ul>
+    <li><b>TryGet</b> - Attempt to fetch a value from the cache only</li>
+    <li><b>Invalidate</b> - Forget a cached key if we've remembered it and call its release function</li>
+    <li><b>InvalidateAll</b> - Forget all the cached keys and start from scratch</li>
+</ul>
+</p>

@@ -1,0 +1,83 @@
+ReactiveXaml series: ReactiveCommand
+
+<h2>What is ReactiveCommand</h2>
+
+<p>
+<code>ReactiveCommand</code> is an ICommand implementation that is simultaneously a RelayCommand implementation, as well as some extra bits that are pretty motivating. Let's jump right into the first example:
+</p>
+
+<code lang="C#">
+
+// This works just like Josh Smith's RelayCommand
+var cmd = new ReactiveCommand(_ => true, Console.WriteLine);
+cmd.CanExecute(null);
+>> true
+
+cmd.Execute("Hello");
+"Hello"
+</code>
+
+<h2>Well that's boring, where's the fun stuff??</h2>
+
+<p>
+However, here's where it gets interesting - we can also provide IObservable&lt;bool&gt; as our CanExecute. For example, here's a command that can only run when the mouse is up (pretend the square brackets are &lt; &gt; - there's a bug in the syntax highlighting):
+</p>
+
+<code lang="C#">
+    var is_mouseup = Observable.Merge(
+        Observable.FromEvent[MouseButtonEventArgs](window, "MouseDown")
+                  .Select(_ => false),
+        Observable.FromEvent[MouseButtonEventArgs](window, "MouseUp")
+                   .Select(_ => true),
+    ).StartWith(true);
+
+    var cmd = new ReactiveCommand(is_mouseup, Console.WriteLine);
+</code>
+
+<p>
+Or, how about a command that can only run if two other commands are disabled:
+</p>
+
+<code lang="C#">
+// Pretend these were already initialized to something more interesting
+var cmd1 = new ReactiveCommand(null, null);
+var cmd2 = new ReactiveCommand(null, null);
+
+var can_exec = cmd1.CanExecuteObservable.CombineLatest(cmd2.CanExecuteObservable, 
+                     (lhs, rhs) => !(lhs && rhs));
+var new_cmd = new ReactiveCommand(can_exec, Console.WriteLine);
+</code>
+
+<p>
+One thing that's important to notice here, is that the command's CanExecute updates <b>immediately</b>, instead of relying on CommandManager.RequerySuggested. If you've ever had the problem in WPF or Silverlight where your buttons don't reenable themselves until you switch focus or click them, you've seen this bug. Using an IObservable means that the Commanding framework knows <i>exactly</i> when the state changes, and doesn't need to requery every command object on the page.
+</p>
+
+<h2>What about Execute?</h2>
+
+<p>
+This is where ReactiveCommand's IObservable implementation comes in - ReactiveCommand itself can be observed, and it provides new items whenever Execute is called (the items being the parameter passed into the Execute call). This means, that Subscribe can act the same as the Execute Action, or we can actually get a fair bit more clever. For example:
+</p>
+
+<code lang="C#">
+
+var cmd = new ReactiveCommand(x => x is int, null);
+cmd.Where(x => ((int)x) % 2 == 0)
+   .Subscribe(x => Console.WriteLine("Even numbers like {0} are cool!", x));
+
+cmd.Where(x => ((int)x) % 2 != 0)
+   .Timestamps()
+   .Subscribe(x => 
+      Console.WriteLine("Odd numbers like {0} are even cooler, especially at {1}!", x.Value, x.Timestamp));
+
+cmd.Execute(2);
+>>> "Even numbers like 2 are cool!"
+
+cmd.Execute(5);
+>>> "Odd numbers like 5 are even cooler, especially at (the current time)!"
+</code>
+
+<h2>Sum it all up, like that guy in Scrubs does all the time</h2>
+
+<p>
+Hopefully that gives you some motivating examples as to why combining the Reactive Extensions with WPF is a really awesome idea, and not just for drag and drop! In the rest of this series I'll spend some time explaining the rest of the classes and their use, as well as going through a small sample application that I've written that I'll soon be posting. 
+</p>
