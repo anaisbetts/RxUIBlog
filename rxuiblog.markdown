@@ -693,7 +693,7 @@ nearly as pretty:
     // newing up the list of FlickrPhotos while blatantly abusing Zip.
     //
 
-    public static List[FlickrPhoto] GetSearchResultsFromFlickr(string search_term)
+    public static List<FlickrPhoto> GetSearchResultsFromFlickr(string search_term)
     {
         var doc = XDocument.Load(String.Format(CultureInfo.InvariantCulture,
             "http://api.flickr.com/services/feeds/photos_public.gne?tags={0}&format=rss_200",
@@ -759,7 +759,25 @@ to protect it via a lock just like a Dictionary or a List.
 
 Here's a motivating sample:
 
-`// Here, we're giving it our "calculate" function - the 'ctx' variable is  // just an optional parameter that you can pass on a call to Get. var cache = new MemoizingMRUCache[int, int]((x, ctx) => {     Thread.Sleep(5*1000);     // Pretend this calculation isn't cheap     return x * 100; }, 20 /*items to remember*/);  // First invocation, it'll take 5 seconds cache.Get(10); >>> 1000   // This returns instantly cache.Get(10); >>> 1000   // This takes 5 seconds too cache.Get(15); >>> 1500`
+    // Here, we're giving it our "calculate" function - the 'ctx' variable is 
+    // just an optional parameter that you can pass on a call to Get.
+    var cache = new MemoizingMRUCache<int, int>((x, ctx) => {
+        Thread.Sleep(5*1000);     // Pretend this calculation isn't cheap
+        return x * 100;
+    }, 20 /*items to remember*/);
+
+    // First invocation, it'll take 5 seconds
+    cache.Get(10);
+    >>> 1000 
+
+    // This returns instantly
+    cache.Get(10);
+    >>> 1000 
+
+    // This takes 5 seconds too
+    cache.Get(15);
+    >>> 1500
+
 Maintaining an on-disk cache
 ----------------------------
 
@@ -774,15 +792,15 @@ will delete the file on the disk since it's no longer in-use.
 Some other useful functions
 ---------------------------
 
-
-
 -   **TryGet** - Attempt to fetch a value from the cache only
 -   **Invalidate** - Forget a cached key if we've remembered it and
     call its release function
 -   **InvalidateAll** - Forget all the cached keys and start from
     scratch
 
-ReactiveXaml Series: On combining notifications
+
+# ReactiveXaml Series: On combining notifications
+
 I was excited today when I got my first Email post
 [to the Google Group for RxXaml](http://groups.google.com/group/reactivexaml/),
 and even better, it was a **great** question; what the poster was
@@ -822,7 +840,14 @@ IObservable when **any** property changes - this means, that it's
 very easy to watch an entire object. Often, this is useful enough -
 when it isn't, `Where`helps you out:
 
-`ReactiveObject Toaster;  // Any change will print something Toaster.Subscribe(x => Console.WriteLine("{0} changed!", x.PropertyName);  // This is an observable that only notifies when the Foo property changes var FooChanged = Toaster.Where(x => x.PropertyName == "Foo");`
+    ReactiveObject Toaster;
+
+    // Any change will print something
+    Toaster.Subscribe(x => Console.WriteLine("{0} changed!", x.PropertyName);
+
+    // This is an observable that only notifies when the Foo property changes
+    var FooChanged = Toaster.Where(x => x.PropertyName == "Foo");
+
 Merge, CombineLatest, and Zip - the 'And' and 'Or' of Rx
 --------------------------------------------------------
 
@@ -831,10 +856,18 @@ that stand out. The first is `Observable.Merge`: as its name
 implies, Merge takes several IObservables *of the same type*, and
 returns an IObservable that fires when
 **any one of its inputs fires**. Thinking in a boolean sense,
-**Merge is kind of like *Or***. Having to be of the same type isn't
+**Merge is kind of like *Or*.** Having to be of the same type isn't
 as onerous of a requirement:
 
-`IObservable[float] O1; IObservable[int] O2; IObservable[string] O3;  // Tell me when *any* of these 3 send a notification var result = Observable.Merge(     O1.Select(_ => true), O2.Select(_ => true), O3.Select(_ => true) );`
+    IObservable<float> O1;
+    IObservable<int> O2;
+    IObservable<string> O3;
+
+    // Tell me when *any* of these 3 send a notification
+    var result = Observable.Merge(
+        O1.Select(_ => true), O2.Select(_ => true), O3.Select(_ => true)
+    );
+
 One of the difficulties of Merge that can sometimes bite you, is
 that it is **stateless** - when you get a notification about O1,
 you don't have any knowledge about what items came in on O2 or O3.
@@ -845,7 +878,25 @@ the new O1 *and the latest value of O2*. Furthermore, we can take
 the **result** and expose it as a change-notifying property
 [via ObservableAsPropertyHelper](http://blog.paulbetts.org/index.php/2010/07/05/reactivexaml-series-implementing-search-with-observableaspropertyhelper/).
 
-`// Subjects are just IObservables that we can trigger by-hand // They're the mutable variables of Rx Subject[int] s1; Subject[int] s2;  // Combine s1 with s2 and write its output to Console s1.CombineLatest(s2, (a,b) => a * b).Subscribe(Console.WriteLine);  s1.OnNext(5);  // Nothing happens, no value for s2  s2.OnNext(10);  // 10 came in, combine the 10 with whatever s1 was (5) >>> 50  s2.OnNext(20); // 20 came in, still use s1's latest value >>> 100  s1.OnNext(2); // s1 is 1, take s2's latest value (20) >>> 40`
+    // Subjects are just IObservables that we can trigger by-hand
+    // They're the mutable variables of Rx
+    Subject<int> s1;
+    Subject<int> s2;
+
+    // Combine s1 with s2 and write its output to Console
+    s1.CombineLatest(s2, (a,b) => a * b).Subscribe(Console.WriteLine);
+
+    s1.OnNext(5);  // Nothing happens, no value for s2
+
+    s2.OnNext(10);  // 10 came in, combine the 10 with whatever s1 was (5)
+    >>> 50
+
+    s2.OnNext(20); // 20 came in, still use s1's latest value
+    >>> 100
+
+    s1.OnNext(2); // s1 is 1, take s2's latest value (20)
+    >>> 40
+
 Finally, we have `Observable.Zip`. Like the other two, this
 function also combines observables, but this function like its
 IEnumerable counterpart, is only concerned about
@@ -855,7 +906,23 @@ come in at the *exact same time* so an "Observable.And" wouldn't
 make much sense). Zip will not yield elements until it has **both**
 of its "slots" filled for the next item.
 
-`Subject[int] s1; Subject[int] s2;  s1.Zip(s2, (a,b) => a * b).Subscribe(Console.WriteLine);  s1.OnNext(2); // Nothing, no pair yet s1.OnNext(5); // Still no pair s2.OnNext(10); // We've got a pair (2,10), let's send it down >>> 20  s1.OnNext(10); // s2's empty, no pair s2.OnNext(1); // 5 * 1 >>> 5 s2.OnNext(10); // 10*10 >>> 100 s2.OnNext(100); // s1's empty, no output`
+    Subject<int> s1;
+    Subject<int> s2;
+
+    s1.Zip(s2, (a,b) => a * b).Subscribe(Console.WriteLine);
+
+    s1.OnNext(2); // Nothing, no pair yet
+    s1.OnNext(5); // Still no pair
+    s2.OnNext(10); // We've got a pair (2,10), let's send it down
+    >>> 20
+
+    s1.OnNext(10); // s2's empty, no pair
+    s2.OnNext(1); // 5 * 1
+    >>> 5
+    s2.OnNext(10); // 10*10
+    >>> 100
+    s2.OnNext(100); // s1's empty, no output
+
 Combining Notifications for Visual State Manager
 ------------------------------------------------
 
@@ -863,15 +930,27 @@ Here's another clever trick that I really like - often, we need to
 change the visual state on a variety of different notifications of
 different types and are unrelated. Here's how to do it:
 
-`IObservable[int] SomethingToWatch, SomethingElse; IObservable[float] AThirdThing; var state = Observable.Merge(     SomethingToWatch.Select(_ => "State1"),     SomethingElse.Select(_ => "State2"),     AThirdThing.Select(_ => "State3") );  state.Subscribe(x =>      VisualStateManager.GoToState(this, x, true));`
+    IObservable<int> SomethingToWatch, SomethingElse;
+    IObservable<float> AThirdThing;
+
+    var state = Observable.Merge(
+        SomethingToWatch.Select(_ => "State1"),
+        SomethingElse.Select(_ => "State2"),
+        AThirdThing.Select(_ => "State3")
+    );
+
+    state.Subscribe(x => VisualStateManager.GoToState(this, x, true));
+
+
 Observable.Merge can also be used along with Scan to keep a
 reference count, check out
 [this example from ReactiveAsyncCommand](https://github.com/xpaulbettsx/ReactiveUI/blob/master/ReactiveUI.Xaml/ReactiveAsyncCommand.cs#L83)
 where we use two observables and Select them to 1 and -1, then keep
 a running count via Scan.
 
-ReactiveXaml Series: QueuedAsyncMRUCache - the async version of
-MemoizingMRUCache
+
+# ReactiveXaml Series: ObservableAsyncMRUCache - the async version of MemoizingMRUCache
+
 A thread-safe, asynchronous MemoizingMRUCache
 ---------------------------------------------
 
@@ -882,7 +961,7 @@ cache results of expensive calculations, but one disadvantage is
 that it is fundamentally a single-threaded data structure:
 accessing it from multiple threads, or trying to cache the results
 of several in-flight web requests at the same time would result in
-corruption. QueuedAsyncMRUCache solves all of these issues, as well
+corruption. ObservableAsyncMRUCache solves all of these issues, as well
 as gives us a new method called `AsyncGet`, which returns an
 IObservable. This IObservable will fire exactly once, when the
 async command returns.
@@ -914,7 +993,7 @@ a few handy things:
 A difficult problem - preventing concurrent identical requests
 --------------------------------------------------------------
 
-Furthermore, QueuedAsyncMRUCache solves a tricky problem as well:
+Furthermore, ObservableAsyncMRUCache solves a tricky problem as well:
 let's revisit the previous example. As we walk the list of
 messages, we will asynchronously issue WebRequests. Imagine a
 message list where every message is from the same user:
@@ -929,11 +1008,13 @@ What *should* happen? When the 2nd call to AsyncGet occurs, we need
 to check the cache, but we also need to check the list of
 outstanding requests. Really, for every possible input, you can
 think of it being in one of three states: either in-cache,
-in-flight, or brand new. QueuedAsyncMRUCache ensures (through a lot
+in-flight, or brand new. ObservableAsyncMRUCache ensures (through a lot
 of code!) that all three cases are handled correctly, in a
 thread-safe manner.
 
-Making INotifyPropertyChanged type-safe using Expressions
+
+# Making INotifyPropertyChanged type-safe using Expressions
+
 [Some folks on the mailing list](http://groups.google.com/group/reactivexaml/browse_thread/thread/c6fc10f65de05be0)
 for [ReactiveXaml](http://bit.ly/rxxaml) rightly pointed out some
 code in ReactiveXaml that could really use some work - my
@@ -967,15 +1048,38 @@ Using Expression Trees to implement a better version
 
 Here's what the new syntax for defining properties looks like:
 
-`string _SomeProperty;  public string SomeProperty {      get { return _SomeProperty; }      set { _SomeProperty = this.RaiseAndSetIfChanged(x => x.SomeProperty, value); }  }`
+    string _SomeProperty; 
+    public string SomeProperty { 
+        get { return _SomeProperty; } 
+        set { this.RaiseAndSetIfChanged(x => x.SomeProperty, value); } 
+    }
+
 Much improved, and fairly clean (we could do way better if C\# had
 Macros, but I digress). Compare this with the old, dumb looking
 syntax:
 
-`string _SomeProperty;  public string SomeProperty {      get { return _SomeProperty; }      set { _SomeProperty = this.RaiseAndSetIfChanged(_SomeProperty, value,          x => _SomeProperty, "SomeProperty");     } }`
+    string _SomeProperty; 
+    public string SomeProperty { 
+        get { return _SomeProperty; } 
+        set { _SomeProperty = this.RaiseAndSetIfChanged(_SomeProperty, value, 
+            x => _SomeProperty, "SomeProperty");
+        }
+    }
+
 Or doing this by-hand:
 
-`string _SomeProperty;  public string SomeProperty {      get { return _SomeProperty; }      set {          if (_SomeProperty == value)             return;          _SomeProperty = value;         RaisePropertyChanged("SomeProperty");     } }`
+    string _SomeProperty; 
+    public string SomeProperty { 
+        get { return _SomeProperty; } 
+        set { 
+            if (_SomeProperty == value)
+                return;
+
+            _SomeProperty = value;
+            RaisePropertyChanged("SomeProperty");
+        }
+    }
+
 How can we do this? Expression Trees! When we write
 *Expression<Func<T\>\>* as a type instead of *Func<T\>*, instead of
 getting a compiled method pointer, we get an object representing
@@ -993,7 +1097,16 @@ is the type itself, the compiler will automatically bolt this on to
 any ReactiveObject while still treating it as the correct derived
 type:
 
-`public static class ReactiveObjectExpressionMixin {     public static TRet RaiseAndSetIfChanged[TObj, TRet](this TObj This,              Expression[Func[TObj, TRet]] Property,              TRet Value)         where TObj : ReactiveObject     {     } }`
+    public static class ReactiveObjectExpressionMixin
+    {
+        public static TRet RaiseAndSetIfChanged[TObj, TRet](this TObj This, 
+                Expression[Func[TObj, TRet]] Property, 
+                TRet Value)
+            where TObj : ReactiveObject
+        {
+        }
+    }
+
 Some tricky caveats
 -------------------
 
@@ -1008,7 +1121,9 @@ by-hand via RaisePropertyChanged, this method is solely a helper:
     optional - otherwise the extension method won't be invoked, the old
     busted version will
 
-Calling Web Services in Silverlight using ReactiveXaml
+
+# Calling Web Services in Silverlight using ReactiveXaml
+
 One of the scenarios that our summer intern
 [Roberto Sonnino](http://virtualdreams.com.br/blog/) pointed out
 over the summer that was somewhat annoying in
