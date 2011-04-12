@@ -1,5 +1,7 @@
-ReactiveXaml: A compelling combination of MVVM and Reactive
-Extensions (Rx) I've been hacking on a library in my spare time
+ReactiveXaml: A compelling combination of MVVM and Reactive Extensions (Rx) 
+===========================================================================
+	
+I've been hacking on a library in my spare time
 (Hah!) that I really think has the potential to change how folks
 write Silverlight/WPF applications and I'm really excited about it.
 After testing concepts and refining the interface using several
@@ -19,6 +21,7 @@ going on, Reactive Extensions provides a sane alternative. I'm
 going to be posting quite a bit more about this library as well as
 a sample application, but for now, check out
 [the code to ReactiveXaml on Github](http://github.com/xpaulbettsx/ReactiveXaml).
+
 What's in this library
 ----------------------
 
@@ -50,6 +53,7 @@ main use for this is in unit tests, as well as being able to say
 things in Debug mode like, "If any item runs in the Dispatcher
 scheduler for longer than 400ms that would've made the UI
 unresponsive, crash the application".
+
 Blend SDK Integration
 ---------------------
 
@@ -63,6 +67,7 @@ makes it fairly straightforward to build a state machine based on
 the changes in the ViewModel. `ObservableTrigger` - this trigger
 will fire when an IObservable calls OnNext and can be tied to any
 arbitrary Expression Action.
+
 Other stuff that's useful
 -------------------------
 
@@ -90,8 +95,13 @@ until some of the inflight requests have been satisfied.
 combines some of log4net's syntax with the ubiquity of the Rails
 logger - any class that implements the dummy IEnableLogger
 interface will able to access a logger for that class (i.e.
-`this.Log().Warn("Something bad happened!");`) ReactiveXaml series:
-ReactiveCommand
+`this.Log().Warn("Something bad happened!");`) 
+
+
+ReactiveXaml series: ReactiveCommand
+====================================
+
+
 What is ReactiveCommand
 -----------------------
 
