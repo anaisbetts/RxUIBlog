@@ -1,5 +1,4 @@
-ReactiveXaml: A compelling combination of MVVM and Reactive Extensions (Rx) 
-===========================================================================
+# ReactiveXaml: A compelling combination of MVVM and Reactive Extensions (Rx) 
 	
 I've been hacking on a library in my spare time
 (Hah!) that I really think has the potential to change how folks
@@ -42,7 +41,7 @@ straightforward way to observe the changes of a single property.
 validated via DataAnnotations by implementing IDataErrorInfo, so
 properties can be annotated with their restrictions and the UI will
 automatically reflect the errors.
-`ObservableAsPropertyHelper<t></t>` - a class that easily lets you
+`ObservableAsPropertyHelper<T>` - a class that easily lets you
 convert an IObservable<T\> into a property that stores its latest
 value, as well as fires NotifyPropertyChanged when the property
 changes. This is really useful for combining existing properties
@@ -95,11 +94,11 @@ until some of the inflight requests have been satisfied.
 combines some of log4net's syntax with the ubiquity of the Rails
 logger - any class that implements the dummy IEnableLogger
 interface will able to access a logger for that class (i.e.
-`this.Log().Warn("Something bad happened!");`) 
+`this.Log().Warn("Something bad happened!");`)
 
 
-ReactiveXaml series: ReactiveCommand
-====================================
+
+# ReactiveXaml series: ReactiveCommand
 
 
 What is ReactiveCommand
@@ -110,20 +109,46 @@ simultaneously a RelayCommand implementation, as well as some extra
 bits that are pretty motivating. Let's jump right into the first
 example:
 
-`// This works just like Josh Smith's RelayCommand var cmd = new ReactiveCommand(_ => true, Console.WriteLine); cmd.CanExecute(null); >> true  cmd.Execute("Hello"); "Hello"`
+    // This works just like Josh Smith's RelayCommand
+    var cmd = ReactiveCommand.Create(x => true, x => Console.WriteLine(x));
+    cmd.CanExecute(null);
+    >> true
+
+    cmd.Execute("Hello");
+    "Hello"
+
+
 Well that's boring, where's the fun stuff??
 -------------------------------------------
 
 However, here's where it gets interesting - we can also provide
 IObservable<bool\> as our CanExecute. For example, here's a command
-that can only run when the mouse is up (pretend the square brackets
-are < \> - there's a bug in the syntax highlighting):
+that can only run when the mouse is up:
 
-`var is_mouseup = Observable.Merge(         Observable.FromEvent[MouseButtonEventArgs](window, "MouseDown")                   .Select(_ => false),         Observable.FromEvent[MouseButtonEventArgs](window, "MouseUp")                    .Select(_ => true),     ).StartWith(true);      var cmd = new ReactiveCommand(is_mouseup, Console.WriteLine);`
+    var mouseIsUp = Observable.Merge(
+        Observable.FromEvent<MouseButtonEventArgs>(window, "MouseDown")
+                  .Select(_ => false),
+        Observable.FromEvent<MouseButtonEventArgs>(window, "MouseUp")
+                  .Select(_ => true),
+    ).StartWith(true);
+
+    var cmd = new ReactiveCommand(mouseIsUp);
+    cmd.Subscribe(x => Console.WriteLine(x));
+
+
 Or, how about a command that can only run if two other commands are
 disabled:
 
-`// Pretend these were already initialized to something more interesting var cmd1 = new ReactiveCommand(null, null); var cmd2 = new ReactiveCommand(null, null);  var can_exec = cmd1.CanExecuteObservable.CombineLatest(cmd2.CanExecuteObservable,                       (lhs, rhs) => !(lhs && rhs)); var new_cmd = new ReactiveCommand(can_exec, Console.WriteLine);`
+    // Pretend these were already initialized to something more interesting
+    var cmd1 = new ReactiveCommand();
+    var cmd2 = new ReactiveCommand();
+
+    var can_exec = cmd1.CanExecuteObservable
+        .CombineLatest(cmd2.CanExecuteObservable, (lhs, rhs) => !(lhs && rhs));
+
+    var new_cmd = new ReactiveCommand(can_exec, Console.WriteLine);
+
+
 One thing that's important to notice here, is that the command's
 CanExecute updates **immediately**, instead of relying on
 CommandManager.RequerySuggested. If you've ever had the problem in
@@ -143,7 +168,24 @@ into the Execute call). This means, that Subscribe can act the same
 as the Execute Action, or we can actually get a fair bit more
 clever. For example:
 
-`var cmd = new ReactiveCommand(x => x is int, null); cmd.Where(x => ((int)x) % 2 == 0)    .Subscribe(x => Console.WriteLine("Even numbers like {0} are cool!", x));  cmd.Where(x => ((int)x) % 2 != 0)    .Timestamps()    .Subscribe(x =>        Console.WriteLine("Odd numbers like {0} are even cooler, especially at {1}!", x.Value, x.Timestamp));  cmd.Execute(2); >>> "Even numbers like 2 are cool!"  cmd.Execute(5); >>> "Odd numbers like 5 are even cooler, especially at (the current time)!"`
+
+    var cmd = ReactiveCommand.Create(x => x is int, null);
+
+    cmd.Where(x => ((int)x) % 2 == 0)
+       .Subscribe(x => Console.WriteLine("Even numbers like {0} are cool!", x));
+
+    cmd.Where(x => ((int)x) % 2 != 0)
+       .Timestamps()
+       .Subscribe(x => 
+          Console.WriteLine("Odd numbers like {0} are even cooler, especially at {1}!", x.Value, x.Timestamp));
+
+    cmd.Execute(2);
+    >>> "Even numbers like 2 are cool!"
+
+    cmd.Execute(5);
+    >>> "Odd numbers like 5 are even cooler, especially at (the current time)!"
+
+
 Sum it all up, like that guy in Scrubs does all the time
 --------------------------------------------------------
 
@@ -154,7 +196,9 @@ I'll spend some time explaining the rest of the classes and their
 use, as well as going through a small sample application that I've
 written that I'll soon be posting.
 
-ReactiveXaml Series: ReactiveAsyncCommand
+
+# ReactiveXaml Series: ReactiveAsyncCommand
+
 Motivation
 ----------
 
@@ -1504,4 +1548,4 @@ how to do it:
 
 `public static ReactiveCommand WrapCommand(ICommand cmd) {     return ReactiveCommand.Create(cmd.CanExecute, cmd.Execute); }`
 
-
+<!-- vim: ts=4 sw=4 et : -->
