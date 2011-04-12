@@ -468,11 +468,27 @@ compile ReactiveXaml in Debug mode, it will print debug messages
 using its logging framework whenever a property changes. Another
 example is, implementing the standard pattern of a property that
 raises the changed event is a few lines shorter:
-`int _someProp; public int SomeProp {     get { return _someProp; }     set { this.RaiseAndSetIfChanged(x => x.SomeProp, value);} }`
+
+    int _someProp;
+    public int SomeProp {
+        get { return _someProp; }
+        set { this.RaiseAndSetIfChanged(x => x.SomeProp, value);}
+    }
+
 
 Compared to the traditional implementation which is a few lines
 longer:
-`int _someProp; public int SomeProp {     get { return _someProp; }     set {         if (_someProp == value)             return;         _someProp = value;         RaisePropertyChanged("SomeProp");     } }`
+
+    int _someProp;
+    public int SomeProp {
+        get { return _someProp; }
+        set {
+            if (_someProp == value)
+                return;
+            _someProp = value;
+            RaisePropertyChanged("SomeProp");
+        }
+    }
 
 Some philosophy
 ---------------
@@ -521,8 +537,9 @@ computers in a lab which synchronize via a message-passing model,
 to a giant cloud computing array that synchronizes via a service
 bus. **I think that's awesome.**
 
-ReactiveXaml series: Implementing search with
-ObservableAsPropertyHelper
+
+#ReactiveXaml series: Implementing search with ObservableAsPropertyHelper
+
 Implementing an auto-search TextBox using Rx and ReactiveXaml
 -------------------------------------------------------------
 
@@ -542,7 +559,7 @@ observable notification came in on.
 The sample app
 --------------
 
-[![image](http://blog.paulbetts.org/wp-photos/OAPHSample.png)](http://www.paulbetts.org/blog_samples/OAPHSample.zip)  
+[![image](wp-photos/OAPHSample.png)](http://www.paulbetts.org/blog_samples/OAPHSample.zip)  
 *Click on the image to download the sample project.*
 
 Going through the code
@@ -551,15 +568,49 @@ Going through the code
 First, let's look at our main data item - a Flickr search result
 item. Since we will never change these objects, we don't need any
 INotifyPropertyChanged goo, just regular old auto-properties:
-`public class FlickrPhoto {     public string Title { get; set; }     public string Description { get; set; }     public string Url { get; set; } }`
+
+    public class FlickrPhoto {
+        public string Title { get; set; }
+        public string Description { get; set; }
+        public string Url { get; set; }
+    }
 
 Now, the app data model - there's two real bits; the
 **current search text**, and the **List of FlickrPhoto results**.
 In ReactiveXaml, all of this code below is boilerplate - these code
 chunks are just some stuff to memorize or put into a snippet and
 never look at it again.
-*Note: once again because of a syntax highlighting glitch, generics are using [] instead of < \>*
-`public class AppViewModel : ReactiveValidatedObject {     //     // This is the canonical way to make a read-write property     //      string _SearchTerm;     public string SearchTerm {         get { return _SearchTerm; }         set { this.RaiseAndSetIfChanged(x => x.SearchTerm, value); }     }      //     // This is the canonical way to make a read-only property whose value     // is backed by an IObservable     //      ObservableAsPropertyHelper[List[FlickrPhoto]] _Photos;     public List[FlickrPhoto] Photos {         get { return _Photos.Value; }     }      ObservableAsPropertyHelper[Visibility] _SpinnerVisibility;     public Visibility SpinnerVisibility {         get { return _SpinnerVisibility.Value; }     }      public ReactiveAsyncCommand ExecuteSearch { get; protected set; } }`
+
+    public class AppViewModel : ReactiveValidatedObject
+    {
+        //
+        // This is the canonical way to make a read-write property
+        //
+
+        string _SearchTerm;
+        public string SearchTerm {
+            get { return _SearchTerm; }
+            set { this.RaiseAndSetIfChanged(x => x.SearchTerm, value); }
+        }
+
+        //
+        // This is the canonical way to make a read-only property whose value
+        // is backed by an IObservable
+        //
+
+        ObservableAsPropertyHelper<List<FlickrPhoto>> _Photos;
+        public List<FlickrPhoto> Photos {
+            get { return _Photos.Value; }
+        }
+
+        ObservableAsPropertyHelper<Visibility> _SpinnerVisibility;
+        public Visibility SpinnerVisibility {
+            get { return _SpinnerVisibility.Value; }
+        }
+
+        public ReactiveAsyncCommand ExecuteSearch { get; protected set; }
+    }
+
 
 Now here's the interesting part
 -------------------------------
@@ -584,13 +635,89 @@ tricky aspects to this:
 Implementing this properly using traditional methods would be
 absolutely awful. Here's the code on how we do it, and it's 5 lines
 in the constructor:
-`public AppViewModel() {     ExecuteSearch = new ReactiveAsyncCommand(null, 0);      //     // Take the inflight items and toggle the visibility     //      var should_spin = ExecuteSearch.ItemsInflight.Select(x => x > 0 ? Visibility.Visible : Visibility.Collapsed);      //     // This was described last time too, we actually do the async function     // here and RegisterAsyncFunction will return an IObservable which     // gives us the output, one item per invocation of ExecuteSearch.Execute     //       var results = ExecuteSearch.RegisterAsyncFunction(         term => GetSearchResultsFromFlickr((string)term));      //     // Here's the awesome bit - every time the SearchTerm changes     // throttled to every 800ms (i.e. drop changes that are happening     // too quickly). Grab the actual text, then only notify on unique     // changes (i.e. ignore "A" => "A"). Finally, only tell us when      // the string isn't empty. When *all* of those things are true,     // fire ExecuteSearch and pass it the term.     //       this.ObservableForProperty[AppViewModel, string]("SearchTerm")         .Throttle(TimeSpan.FromMilliseconds(800))         .Select(x => x.Value).DistinctUntilChanged()         .Where(x => !String.IsNullOrWhiteSpace(x))         .Subscribe(ExecuteSearch.Execute);      //     // This code is also boilerplate, it's the standard way to take our     // observable and wire it up to the property, giving it an initial     // value.     //      _SpinnerVisibility = new ObservableAsPropertyHelper[Visibility](         should_spin, x => RaisePropertyChanged("SpinnerVisibility"), Visibility.Collapsed);      _Photos = new ObservableAsPropertyHelper[List[FlickrPhoto]](         results, _ => RaisePropertyChanged("Photos")); }`
+
+    public AppViewModel()
+    {
+        ExecuteSearch = new ReactiveAsyncCommand(null, 0);
+
+        //
+        // Take the inflight items and toggle the visibility
+        //
+
+        var should_spin = ExecuteSearch.ItemsInflight
+            .Select(x => x > 0 ? Visibility.Visible : Visibility.Collapsed);
+
+        //
+        // This was described last time too, we actually do the async function
+        // here and RegisterAsyncFunction will return an IObservable which
+        // gives us the output, one item per invocation of ExecuteSearch.Execute
+        // 
+
+        var results = ExecuteSearch.RegisterAsyncFunction(
+            term => GetSearchResultsFromFlickr((string)term));
+
+        //
+        // Here's the awesome bit - every time the SearchTerm changes
+        // throttled to every 800ms (i.e. drop changes that are happening
+        // too quickly). Grab the actual text, then only notify on unique
+        // changes (i.e. ignore "A" => "A"). Finally, only tell us when 
+        // the string isn't empty. When *all* of those things are true,
+        // fire ExecuteSearch and pass it the term.
+        // 
+
+        this.ObservableForProperty<AppViewModel, string>("SearchTerm")
+            .Throttle(TimeSpan.FromMilliseconds(800))
+            .Select(x => x.Value).DistinctUntilChanged()
+            .Where(x => !String.IsNullOrWhiteSpace(x))
+            .Subscribe(ExecuteSearch.Execute);
+
+        //
+        // This code is also boilerplate, it's the standard way to take our
+        // observable and wire it up to the property, giving it an initial
+        // value.
+        //
+
+        _SpinnerVisibility = new ObservableAsPropertyHelper<Visibility>(
+            should_spin, x => RaisePropertyChanged("SpinnerVisibility"), Visibility.Collapsed);
+
+        _Photos = new ObservableAsPropertyHelper<List<FlickrPhoto>>(
+            results, _ => RaisePropertyChanged("Photos"));
+    }
 
 Here's the code that actually does the work as an aside, it's not
 nearly as pretty:
-`// // If you don't understand this code, don't worry about it, I just got lazy. // We're just hack-parsing the RSS feed and grabbing out title/desc/url and // newing up the list of FlickrPhotos while blatantly abusing Zip. //  public static List[FlickrPhoto] GetSearchResultsFromFlickr(string search_term) {     var doc = XDocument.Load(String.Format(CultureInfo.InvariantCulture,         "http://api.flickr.com/services/feeds/photos_public.gne?tags={0}&format=rss_200",         HttpUtility.UrlEncode(search_term)));     if (doc.Root == null)         return null;      var titles = doc.Root.Descendants("{http://search.yahoo.com/mrss/}title")         .Select(x => x.Value);     var descriptions = doc.Root.Descendants("{http://search.yahoo.com/mrss/}description")         .Select(x => HttpUtility.HtmlDecode(x.Value));     var items = titles.Zip(descriptions,         (t, d) => new FlickrPhoto() { Title = t, Description = d }).ToArray();      var urls = doc.Root.Descendants("{http://search.yahoo.com/mrss/}thumbnail")         .Select(x => x.Attributes("url").First().Value);      var ret = items.Zip(urls, (item, url) => { item.Url = url; return item; }).ToList();     return ret; }`
 
-ReactiveXaml series: Using MemoizingMRUCache
+    //
+    // If you don't understand this code, don't worry about it, I just got lazy.
+    // We're just hack-parsing the RSS feed and grabbing out title/desc/url and
+    // newing up the list of FlickrPhotos while blatantly abusing Zip.
+    //
+
+    public static List[FlickrPhoto] GetSearchResultsFromFlickr(string search_term)
+    {
+        var doc = XDocument.Load(String.Format(CultureInfo.InvariantCulture,
+            "http://api.flickr.com/services/feeds/photos_public.gne?tags={0}&format=rss_200",
+            HttpUtility.UrlEncode(search_term)));
+        if (doc.Root == null)
+            return null;
+
+        var titles = doc.Root.Descendants("{http://search.yahoo.com/mrss/}title")
+            .Select(x => x.Value);
+        var descriptions = doc.Root.Descendants("{http://search.yahoo.com/mrss/}description")
+            .Select(x => HttpUtility.HtmlDecode(x.Value));
+        var items = titles.Zip(descriptions,
+            (t, d) => new FlickrPhoto() { Title = t, Description = d }).ToArray();
+
+        var urls = doc.Root.Descendants("{http://search.yahoo.com/mrss/}thumbnail")
+            .Select(x => x.Attributes("url").First().Value);
+
+        var ret = items.Zip(urls, (item, url) => { item.Url = url; return item; }).ToList();
+        return ret;
+    }
+
+
+# ReactiveXaml series: Using MemoizingMRUCache
+
 Memoization and Caching
 -----------------------
 
