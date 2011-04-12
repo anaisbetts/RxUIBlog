@@ -1,5 +1,5 @@
 # ReactiveXaml: A compelling combination of MVVM and Reactive Extensions (Rx) 
-	
+    
 I've been hacking on a library in my spare time
 (Hah!) that I really think has the potential to change how folks
 write Silverlight/WPF applications and I'm really excited about it.
@@ -124,6 +124,7 @@ Well that's boring, where's the fun stuff??
 However, here's where it gets interesting - we can also provide
 IObservable<bool\> as our CanExecute. For example, here's a command
 that can only run when the mouse is up:
+
 
     var mouseIsUp = Observable.Merge(
         Observable.FromEvent<MouseButtonEventArgs>(window, "MouseDown")
