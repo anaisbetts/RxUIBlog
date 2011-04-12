@@ -1099,8 +1099,8 @@ type:
 
     public static class ReactiveObjectExpressionMixin
     {
-        public static TRet RaiseAndSetIfChanged[TObj, TRet](this TObj This, 
-                Expression[Func[TObj, TRet]] Property, 
+        public static TRet RaiseAndSetIfChanged<TObj, TRet>(this TObj This, 
+                Expression<Func<TObj, TRet>> Property, 
                 TRet Value)
             where TObj : ReactiveObject
         {
@@ -1144,7 +1144,7 @@ asynchronous function, or the error information. So to this end,
 we'd really like our web service calls to all be vaguely of the
 form:
 
-`IObservable[Something] CoolWebServiceCall(object Param1, object Param2 /*etc*/);`
+`IObservable<Something> CoolWebServiceCall(object Param1, object Param2 /*etc*/);`
 However, we know that neither HttpWebRequest nor the web service
 generated code looks *anything* like that. Normal Silverlight
 objects use an OnCompleted event to fire a callback once the call
@@ -1166,12 +1166,34 @@ so its Translate() method is a good candidate for our example. The
 synchronous signature is:
 
 `string Client.Translate(string appId, string text, string fromLang, string toLang);`
+
 Here's how we could take this and turn it into an Rx-friendly Async
 function - don't be scared off by the five template parameters,
 they're just the types of the parameters and return value, in the
 same order as a Func<T\>:
 
-`var client = new LanguageServiceClient(); var translate_func = Observable.FromAsyncPattern[string,string,string,string,string]     (client.BeginTranslate, client.EndTranslate);  IObservable[string] future = translate_func(appId, "Hello World!", "en", "de"); string result = future.First();   // This will *wait* until the call returns!! >>> "Guten Tag, Welt!"  // // Let's try with an array... //  var input = new[] {"one", "two", "three"};  // Fire off three asynchronous web service calls at the same time var future_items = input.ToObservable()     .SelectMany(x => translate_func(appId, x, "en", "fr"));  // This waits for *all* the web service calls to return string[] result_array = future_items.ToArray();   >>> ["un", "deux", "trois"]`
+    var client = new LanguageServiceClient();
+    var translate_func = Observable.FromAsyncPattern<string,string,string,string,string>
+        (client.BeginTranslate, client.EndTranslate);
+
+    IObservable<string> future = translate_func(appId, "Hello World!", "en", "de");
+    string result = future.First();   // This will *wait* until the call returns!!
+    >>> "Guten Tag, Welt!"
+
+    //
+    // Let's try with an array...
+    //
+
+    var input = new[] {"one", "two", "three"};
+
+    // Fire off three asynchronous web service calls at the same time
+    var future_items = input.ToObservable()
+        .SelectMany(x => translate_func(appId, x, "en", "fr"));
+
+    // This waits for *all* the web service calls to return
+    string[] result_array = future_items.ToArray();  
+    >>> ["un", "deux", "trois"]
+
 An important note for Silverlight!
 ----------------------------------
 
@@ -1198,7 +1220,54 @@ it expects a Func that returns an IObservable as described above.
 Here's a simple example of a good ViewModel object that
 demonstrates this:
 
-`public class TranslateViewModel : ReactiveObject {     //     // Input text     //       string _TextToTranslate;     public string TextToTranslate {         get { return _TextToTranslate; }         set { RaiseAndSetIfChanged(x => x.TextToTranslate, value); }     }      //     // The "output" property we bind to in the UI     //      ObservableAsPropertyHelper[string] _TranslatedText;     public string TranslatedText {         get { return _TranslatedText.Value; }     }      public ReactiveAsyncCommand DoTranslate { get; protected set; }      const string appId = "Get your own, buddy!";     public TranslateViewModel()     {         var client = new LanguageServiceClient();         var translate_func = Observable.FromAsyncPattern[string,string,string,string,string](                 client.BeginTranslate, client.EndTranslate);          // Only one web call at a time please!         DoTranslate = new ReactiveAsyncCommand(null, 1);          //         // 'x' is the CommandParameter passed in, which we will use as the         // source text         //          var results = DoTranslate.RegisterObservableAsyncFunction(             x => translate_func(appId, (string)x, "en", "de"));                      _TranslatedText = this.ObservableToProperty(             results, x => x.TranslatedText);     } }`
+    public class TranslateViewModel : ReactiveObject
+    {
+        //
+        // Input text
+        // 
+
+        string _TextToTranslate;
+        public string TextToTranslate {
+            get { return _TextToTranslate; }
+            set { RaiseAndSetIfChanged(x => x.TextToTranslate, value); }
+        }
+
+        //
+        // The "output" property we bind to in the UI
+        //
+
+        ObservableAsPropertyHelper<string> _TranslatedText;
+        public string TranslatedText {
+            get { return _TranslatedText.Value; }
+        }
+
+        public ReactiveAsyncCommand DoTranslate { get; protected set; }
+
+        const string appId = "Get your own, buddy!";
+        public TranslateViewModel()
+        {
+            var client = new LanguageServiceClient();
+            var translate_func = Observable.FromAsyncPattern<string,string,string,string,string>(
+                    client.BeginTranslate, client.EndTranslate);
+
+            // Only one web call at a time please!
+            DoTranslate = new ReactiveAsyncCommand(null, 1);
+
+            //
+            // 'x' is the CommandParameter passed in, which we will use as the
+            // source text
+            //
+
+            var results = DoTranslate.RegisterObservableAsyncFunction(
+                x => translate_func(appId, (string)x, "en", "de"));
+                
+            _TranslatedText = this.ObservableToProperty(
+                results, x => x.TranslatedText);
+        }
+    }
+
+
+
 What does that get us?
 ----------------------
 
@@ -1212,7 +1281,9 @@ updates instantly, without any tricky callbacks or mutable state
 variables that have to be guarded by Lock statements to ensure
 multithreaded safety. That's pretty cool.
 
-ReactiveXaml Series: Displaying a 'Loading...' value
+
+# ReactiveXaml Series: Displaying a 'Loading...' value
+
 Some folks from the
 [nRoute Framework](http://nroute.codeplex.com/Thread/View.aspx?ThreadId=227771)
 were looking for an elegant way to handle displaying an
@@ -1222,8 +1293,59 @@ displaying the results. I realized this was pretty easy to do with
 [ReactiveXaml](http://bit.ly/rxxaml), so I wrote up some code -
 here it is:
 
-`public class CoolViewModel : ReactiveObject {     //     // Standard way in RxXaml to declare a notification-enabled property     //       string _InputData;     public string InputData {         get { return _InputData; }         set { this.RaiseAndSetIfChanged(x => x.InputData, value); }     }      // Our ICommand - invoking this will *begin* the async operation     ReactiveAsyncCommand DoubleTheString;      //     // OAPH will create an 'output' property - that is, a property who will      // be updated via an IObservable     //       ObservableAsPropertyHelper[string] _OutputData;     public string OutputData {         get { return _OutputData.Value; }     }      public CoolViewModel(Window MainWindow)     {         DoubleTheString = new ReactiveAsyncCommand(null, 1/*at a time*/);          IObservable[string] doubled_strings = DoubleTheString.RegisterAsyncFunc(x => {             // Pretend to be a slow function             Thread.Sleep(1000);             return String.Format("{0}{0}", x);         });          //         // ReactiveAsyncCommand will fire its OnNext when the command is *invoked*,         // and doubled_strings will fire when the command *completes* - let's use         // this to our advantage:         //          IObservable[string] result_or_loading = Observable.Merge(             DoubleTheString.Select(x => "Loading..."),             doubled_strings         );          // Hook up our new 'result_or_loading' to the output         _OutputData = this.ObservableToProperty(result_or_loading, x => x.OutputData);     } }`
-Some annoying bugs to be aware of in ReactiveXaml for Silverlight
+    public class CoolViewModel : ReactiveObject
+    {
+        //
+        // Standard way in RxXaml to declare a notification-enabled property
+        // 
+
+        string _InputData;
+        public string InputData {
+            get { return _InputData; }
+            set { this.RaiseAndSetIfChanged(x => x.InputData, value); }
+        }
+
+        // Our ICommand - invoking this will *begin* the async operation
+        ReactiveAsyncCommand DoubleTheString;
+
+        //
+        // OAPH will create an 'output' property - that is, a property who will 
+        // be updated via an IObservable
+        // 
+
+        ObservableAsPropertyHelper<string> _OutputData;
+        public string OutputData {
+            get { return _OutputData.Value; }
+        }
+
+        public CoolViewModel(Window MainWindow)
+        {
+            DoubleTheString = new ReactiveAsyncCommand(null, 1/*at a time*/);
+
+            IObservable<string> doubled_strings = DoubleTheString.RegisterAsyncFunc(x => {
+                // Pretend to be a slow function
+                Thread.Sleep(1000);
+                return String.Format("{0}{0}", x);
+            });
+
+            //
+            // ReactiveAsyncCommand will fire its OnNext when the command is *invoked*,
+            // and doubled_strings will fire when the command *completes* - let's use
+            // this to our advantage:
+            //
+
+            IObservable<string> result_or_loading = Observable.Merge(
+                DoubleTheString.Select(x => "Loading..."),
+                doubled_strings
+            );
+
+            // Hook up our new 'result_or_loading' to the output
+            _OutputData = this.ObservableToProperty(result_or_loading, x => x.OutputData);
+        }
+    }
+
+# Some annoying bugs to be aware of in ReactiveXaml for Silverlight
+
 Despite [ReactiveXaml](http://github.com/xpaulbettsx/ReactiveXaml)
 being available for WPF, Silverlight, and Windows Phone 7, I have a
 confession to make: the vast majority of my use with this library
@@ -1257,16 +1379,6 @@ List of bugs fixed as of today
 -   Notifications that were supposed to come in on the UI thread
     were coming in on other threads - this was a dumb typo on my part
 
-Bugs that still need fixed
---------------------------
-
--   To actually get the unit test runner to work, you have to rig
-    [this line](http://github.com/xpaulbettsx/ReactiveXaml/blob/master/ReactiveXaml/Interfaces.cs#L193)
-    to say "return true" - I haven't yet figured out a way to determine
-    whether we are in a unit test runner in Silverlight, since
-    AppDomain.GetAssemblies() doesn't exist, though I've got a good
-    idea I'll try soon.
-
 An annoying caveat for SL4
 --------------------------
 
@@ -1278,13 +1390,32 @@ reflection to set backing fields. The workaround is ugly, you have
 to mark your backing field as public, or use the simpler
 RaisePropertyChanged and write properties by-hand. So, here's the
 way for SL4 to correctly write a read-write property:
-`[IgnoreDataMember] public string _SearchText; public string SearchText {     get { return _SearchText; }     set { this.RaiseAndSetIfChanged(x => x.SearchText, value); } }`
+
+    [IgnoreDataMember]
+    public string _SearchText;
+    public string SearchText {
+        get { return _SearchText; }
+        set { this.RaiseAndSetIfChanged(x => x.SearchText, value); }
+    }
+
 Alternatively, if the 'public' really annoys you, here's how to do
 it by-hand:
-`string _SearchText; public string SearchText {     get { return _SearchText; }     set {         if (_SearchText == value)             return;          _SearchText = value;         this.RaisePropertyChanged("SearchText");     } }`
 
-ReactiveXaml Series: Using ReactiveCollection to improve the Flickr
-Search sample
+    string _SearchText;
+    public string SearchText {
+        get { return _SearchText; }
+        set {
+            if (_SearchText == value)
+                return;
+
+            _SearchText = value;
+            this.RaisePropertyChanged("SearchText");
+        }
+    }
+
+
+# ReactiveXaml Series: Using ReactiveCollection to improve the Flickr Search sample
+
 One of the types
 [in ReactiveXaml](http://blog.paulbetts.org/index.php/2010/10/30/reactivexaml-1-4-0-0-is-released-including-samples-and-binaries/)
 that is quite useful that I haven't mentioned before on the blog is
@@ -1318,7 +1449,16 @@ Since we now have information easily exposed about when items are
 added/removed, it was fairly straightforward to create a Collection
 who automatically follows another Collection via a Selector, called
 "CreateDerivedCollection". Here's the most useful case:
-`var Models = new ReactiveCollection[ModelClass](); var ViewModels = Models.CreateDerivedCollection(x => new ViewModelForModelClass(x));  // Now, adding / removing Models means we  // automatically have a corresponding ViewModel Models.Add(new Model("Hello!"));  ViewModels.Count(); >>> 1`
+
+    var Models = new ReactiveCollection[ModelClass]();
+    var ViewModels = Models.CreateDerivedCollection(x => new ViewModelForModelClass(x));
+
+    // Now, adding / removing Models means we 
+    // automatically have a corresponding ViewModel
+    Models.Add(new Model("Hello!"));
+
+    ViewModels.Count();
+    >>> 1
 
 This really makes it easier follow the M-V-VM pattern properly when
 it comes to collections - the code is editing the Models, and these
@@ -1344,18 +1484,35 @@ I showed how to implement a simple Flickr tag search. Using
 CreateCollection, we can make the tiles appear on a delay which
 looks snazzier.
 
-[![image](http://blog.paulbetts.org/wp-photos/OAPHSample.png)  
+[![image](wp-photos/OAPHSample.png)  
 ](http://www.paulbetts.org/blog_samples/ReactiveCollectionSample.zip)
 *Animations don't show up well as images. Click to download the sample project with binaries.*
 
 Let's take a look at what changed - first, we changed our output
 results from a List to a ReactiveCollection:
-`ObservableAsPropertyHelper[ReactiveCollection[FlickrPhoto]] _Photos; public ReactiveCollection[FlickrPhoto] Photos {     get { return _Photos.Value; } }`
+
+    ObservableAsPropertyHelper<ReactiveCollection<FlickrPhoto>> _Photos;
+    public ReactiveCollection<FlickrPhoto> Photos {
+        get { return _Photos.Value; }
+    }
 
 Next, we update GetSearchResultsFromFlickr to provide a
 ReactiveCollection instead of a List, really only by changing the
 first and last lines:
-`public static ReactiveCollection[FlickrPhoto] GetSearchResultsFromFlickr(string search_term) {     /* [[[SNIP]]] This part is long and boring */      var ret = items.Zip(urls, (item, url) =>          { item.Url = url; return item; }).ToList();      // Take the return list, convert it to an Observable,      // then create a collection who will initially be     // empty, but we'll copy one item at a time every     // 250ms until we've copied everything from ret.     return ret.ToObservable().CreateCollection(TimeSpan.FromMilliseconds(250.0)); }`
+
+    public static ReactiveCollection[FlickrPhoto] GetSearchResultsFromFlickr(string search_term)
+    {
+        /* [[[SNIP]]] This part is long and boring */
+
+        var ret = items.Zip(urls, (item, url) => 
+            { item.Url = url; return item; }).ToList();
+
+        // Take the return list, convert it to an Observable, 
+        // then create a collection who will initially be
+        // empty, but we'll copy one item at a time every
+        // 250ms until we've copied everything from ret.
+        return ret.ToObservable().CreateCollection(TimeSpan.FromMilliseconds(250.0));
+    }
 
 Making it even snazzier - adding the fade-in
 --------------------------------------------
@@ -1373,8 +1530,9 @@ it's a cool trick nevertheless):
 4.  Add an Expression Blend EventTrigger on the Loaded event, that
     will kick off our Storyboard
 
-Detecting whether your .NET library is running under a unit test
-runner
+
+# Detecting whether your .NET library is running under a unit test runner
+
 Here's a piece of code that I found useful for
 [ReactiveXaml](http://github.com/xpaulbettsx/ReactiveXaml), how to
 detect whether you are running under the unit test runner. For
@@ -1384,8 +1542,31 @@ queue to it will run during the unit tests). The official version
 comes
 [from here](https://github.com/xpaulbettsx/ReactiveXaml/blob/master/ReactiveXaml/RxApp.cs#L86).
 
-`public static bool InUnitTestRunner() {     string[] test_assemblies = new[] {         "CSUNIT",         "NUNIT",         "XUNIT",         "MBUNIT",         "TESTDRIVEN",         "QUALITYTOOLS.TIPS.UNITTEST.ADAPTER",         "QUALITYTOOLS.UNITTESTING.SILVERLIGHT",         "PEX",     };  #if SILVERLIGHT     return Deployment.Current.Parts.Any(x =>        test_assemblies.Any(name => x.Source.ToUpperInvariant().Contains(name))); #else     return AppDomain.CurrentDomain.GetAssemblies().Any(x =>       test_assemblies.Any(name => x.FullName.ToUpperInvariant().Contains(name))); #endif }`
-Making Async I/O work for you, Reactive style
+    public static bool InUnitTestRunner()
+    {
+        string[] test_assemblies = new[] {
+            "CSUNIT",
+            "NUNIT",
+            "XUNIT",
+            "MBUNIT",
+            "TESTDRIVEN",
+            "QUALITYTOOLS.TIPS.UNITTEST.ADAPTER",
+            "QUALITYTOOLS.UNITTESTING.SILVERLIGHT",
+            "PEX",
+        };
+
+    #if SILVERLIGHT
+        return Deployment.Current.Parts.Any(x => 
+            test_assemblies.Any(name => x.Source.ToUpperInvariant().Contains(name)));
+    #else
+        return AppDomain.CurrentDomain.GetAssemblies().Any(x =>
+            test_assemblies.Any(name => x.FullName.ToUpperInvariant().Contains(name)));
+    #endif
+    }
+
+
+# Making Async I/O work for you, Reactive style
+
 Earlier today, I read
 [a fantastic article about the TPL](http://www.hanselman.com/blog/BackToParallelBasicsDontBlockYourThreadsMakeAsyncIOWorkForYou.aspx)
 by Scott Hanselman. In it, he describes how to take a fairly
@@ -1420,6 +1601,20 @@ Seeing the problem again
 Let's take a look at the synchronous version of the code again - we
 want to take this and rewrite it so that it doesn't block:
 
+    private static bool ValidateUri(string Uri)
+    {
+        try
+        {
+            var request = WebRequest.Create(Uri) as HttpWebRequest;
+            var response = request.GetResponse() as HttpWebResponse;
+            return (response.StatusCode == HttpStatusCode.OK);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
 Writing our initial stab at VerifyUrlAsync
 ------------------------------------------
 
@@ -1428,7 +1623,27 @@ function that returns a future result. However, instead of using
 Task as our return type, we'll define a function that returns
 IObservable:
 
+    public IObservable<KeyValuePair<string, bool>> ValidateUrlAsync(string uri)
+
 Now, let's see the implementation:
+
+    IObservable<KeyValuePair<string, bool>> ValidateUriAsync(string Uri)
+    {
+        var request = WebRequest.Create(Uri);
+
+        // This gives us a "GetResponseAsync" function whose prototype is
+        // IObservable[WebResponse] GetResponseAsync() - just like the sync
+        // version, but the return value wrapped in IObservable. 
+        var response_fetcher = Observable.FromAsyncPattern<WebResponse>(
+            request.BeginGetResponse, request.EndGetResponse);
+
+        // The clever part here is the Catch - if the response_fetcher IObservable
+        // ends with OnError, we'll instead act as if it didn't end and splice in
+        // a "completed successfully" IObservable who returns null and ends
+        return response_fetcher()
+            .Catch(Observable.Return<WebResponse>(null))
+            .Select(resp => new KeyValuePair<string, bool>(Uri, resp != null && resp.StatusCode == HttpStatusCode.OK));
+    }
 
 How can we use this?
 --------------------
@@ -1436,6 +1651,16 @@ How can we use this?
 This method will not block, it will instantly return you an
 IObservable representing the future result. So, there are a couple
 of ways you can use the Observable to "unpack" the result:
+
+    // Block until I get the result
+    // Equivalent of Task.Wait
+    var output = ValidateUriAsync("http://foo.com").First();
+
+    // Don't block, but notify me when we produce a result
+    // Equivalent(*) to Task.ContinueWith
+    ValidateUriAsync("http://bar.com").Subscribe(result => {
+        Console.WriteLine(result);
+    });
 
 Now, let's see how we can do arrays:
 ------------------------------------
@@ -1458,6 +1683,23 @@ our future list back to IObservable<T\> - so what's the way to
 flatten a list in LINQ? SelectMany, of course! SelectMany is the
 secret behind writing async Rx code. Let's see how to do it:
 
+    IObservable<IDictionary<string, bool>> ValidateManyUrisAsync(string[] Uris)
+    {
+        // Aggregate will take a "future list" and return a future with only one item
+        // (Just like LINQ's Aggregate takes a list and returns a single value)
+
+        // For every result that ValidateUrlAsync provides, we will execute the
+        // Aggregate block. When SelectMany completes, Aggregate can finally
+        // return its one result 
+
+        return Uris.ToObservable()
+           .SelectMany(x => ValidateUriAsync(x))
+           .Aggregate(new ConcurrentDictionary<string, bool>(), (acc, pair) => {
+               acc.TryAdd(pair.Key, pair.Value);
+               return acc;
+           });
+    }
+
 The code above is still asynchronous - at no time will we block,
 and it will instantly return. The SelectMany's default IScheduler
 will run items on the TaskPool (actually in this case, we never
@@ -1469,10 +1711,9 @@ If we were to dump the IObservables at every point of the
 computation, it'd look something like this:
 
 `[ "http://foo", "http://bar" ] ===>   [ {"http://foo", false}, {"http://bar", false} ]  ===>  [ Dictionary ]`
+
 Cool! Where can I learn more?
 -----------------------------
-
-
 
 -   The
     [Rx Hands-on-lab](http://blogs.msdn.com/b/rxteam/archive/2010/07/15/rx-hands-on-labs-published.aspx)
@@ -1491,7 +1732,9 @@ Cool! Where can I learn more?
     and Rx.NET is also a good way to understand many practical uses of
     Rx, especially if you're writing desktop / Silverlight / WP7 apps.
 
-Testing your ViewModels using Time Travel and ReactiveUI
+
+# Testing your ViewModels using Time Travel and ReactiveUI
+
 Testing asynchronous ViewModel interactions is tough
 ----------------------------------------------------
 
@@ -1520,6 +1763,37 @@ actually *deferred*, to take the place of WPF/Silverlight's
 Dispatcher. Enter EventLoopScheduler! We can use this to create a
 "pretend" Dispatcher on-the-fly that we control:
 
+    [Fact]
+    public void FetchImageFromSiteCommandTest()
+    {
+        // Replace the immediate scheduler with an event loop (a thread who just 
+        // waits in the background to process stuff as it arrives, one at a time)
+        var origSched = RxApp.DeferredScheduler;
+        RxApp.DeferredScheduler = new EventLoopScheduler();
+
+        // MyCoolViewModel has an ICommand called FetchImageFromSite
+        var fixture = new MyCoolViewModel();
+        fixture.FetchImageFromSite("myCoolImage.jpg").Execute();
+
+        // While it's running, make sure we can't execute anything
+        Assert.False(fixture.FetchImageFromSite.CanExecute("myCoolImage.jpg"));
+        Assert.False(fixture.DownloadedImages.Any(x => x.Name == "myCoolImage.jpg"));
+
+        // Wait until it completes
+        fixture.FetchImageFromSite.ItemsInflight
+            .Where(count => count == 0)
+            .First();
+
+        // Verify that the Image is downloaded
+        Assert.True(fixture.DownloadedImages.Any(x => x.Name == "myCoolImage"));
+
+        // Now we *should* be able to execute the command
+        Assert.True(fixture.FetchImageFromSite.CanExecute("myCoolImage.jpg"));
+
+        // Replace the old scheduler
+        RxApp.DeferredScheduler = origSched;
+    }
+
 This is alright, but it still will slow down our test suite by
 quite a bit, waiting for network access. What's worse, if we were
 testing something more complicated, we could get tests that pass
@@ -1532,6 +1806,13 @@ Testing software via Time Travel?!
 The guys from DevLabs came up with a pretty ingenious way to solve
 this. Let's look at the definition of IScheduler, the interface
 through which we send all of our deferred processing:
+
+    public interface IScheduler
+    {
+        IDisposable Schedule(Action action);
+        IDisposable Schedule(Action action, TimeSpan dueTime);
+        DateTimeOffset Now { get; }
+    }
 
 So, we can schedule code to run right now, we can schedule it to
 run after a certain amount of time has elapsed, and then there's
@@ -1568,6 +1849,12 @@ Array.
 Let's see how we can create a fake async Read method, that will
 simulate taking up some time and returning a result:
 
+    IObservable<byte[]> mockReadBytesAsync()
+    {
+        // Wait ten seconds, then return the byte array
+        return Observable.Return(new byte[] {1,2,3}).Delay(TimeSpan.FromSeconds(10), RxApp.TaskpoolScheduler);
+    }
+
 The cool thing about this mock, is that if you used it in a normal
 environment or under an EventLoopScheduler, it'd do exactly as it
 said: wait 10 seconds, then return that array. Under the
@@ -1582,6 +1869,67 @@ you can see how it's wired up). Inverting the control to actually
 get the mock function here is pretty ugly, there are certainly
 better ways to go about it.
 
+    public class MyCoolViewModel: ReactiveObject
+    {
+        // Create a Property to store the results
+        ObservableAsPropertyHelper<byte[]> _BytesWeHaveRead;
+        public byte[] BytesWeHaveRead {
+            get { return _BytesWeHaveRead.Value; }
+        }
+
+        // The command we'll be testing
+        ReactiveAsyncCommand ReadBytesCommand { get; private set; }
+
+        public MyCoolViewModel(Func<IObservable<byte[]>> readBytesFunc)
+        {
+            ReadBytesCommand = new ReactiveAsyncCommand();
+
+            // Take our Command, send it through the readBytesFunc function, then
+            // pipe the results to the BytesWeHaveRead property
+            _BytesWeHaveRead = ReadBytesCommand
+                .RegisterAsyncObservable(_ => readBytesFunc())
+                .ToProperty(this, x => x.BytesWeHaveRead);
+        }
+    }
+
+    IObservable<byte[]> mockReadBytesAsync()
+    {
+        // Wait ten seconds, then return the byte array
+        return Observable.Return(new byte[] {1,2,3}).Delay(TimeSpan.FromSeconds(10), RxApp.TaskpoolScheduler);
+    }
+
+    [Fact]
+    public void ReadBytesAsyncCommandTest()
+    {
+        // Replace all schedulers with the TestScheduler
+        (new TestScheduler()).With(sched => {
+            var fixture = new MyCoolViewModel(mockReadBytesAsync);
+
+            // Execute the command - remember that it should take 10 seconds to
+            // execute before returning
+            fixture.ReadBytesCommand.Execute(null);
+
+            // 1 second in, it should still be running, the results should be empty
+            sched.RunToMilliseconds(1000)
+            Assert.False(fixture.ReadBytesCommand.CanExecute(null));
+            Assert.Null(fixture.BytesWeHaveRead);
+
+            // 9 seconds in, same deal. Remember though, this doesn't take 9 seconds
+            // of actual wall time to execute, this entire test is finished instantly
+            sched.RunToMilliseconds(9000)
+            Assert.False(fixture.ReadBytesCommand.CanExecute(null));
+            Assert.Null(fixture.BytesWeHaveRead);
+
+            // 11 seconds in, it should be complete - we should be able to read
+            // another block since we're done with the first one.
+            sched.RunToMilliseconds(11000)
+            Assert.True(fixture.ReadBytesCommand.CanExecute(null));
+            Assert.Equal(1, fixture.BytesWeHaveRead[0]);
+            Assert.Equal(2, fixture.BytesWeHaveRead[1]);
+            Assert.Equal(3, fixture.BytesWeHaveRead[2]);
+        });
+    }
+
 Cool, right??
 -------------
 
@@ -1593,7 +1941,9 @@ more about TestScheduler, Wes Dyer and Jeffrey Van Gogh from the Rx
 team talk about it in-depth here:
 [Wes Dyer and Jeffrey Van Gogh: Rx Virtual Time](http://channel9.msdn.com/Shows/Going+Deep/Wes-Dyer-and-Jeffrey-Van-Gogh-Inside-Rx-Virtual-Time)
 
-Watching DependencyProperties using ReactiveUI
+
+# Watching DependencyProperties using ReactiveUI
+
 Watching DependencyProperties in WPF is easy...
 -----------------------------------------------
 
@@ -1606,6 +1956,16 @@ are still an important part of WPF/Silverlight.
 
 Let's see how we would do this in WPF - it's fairly
 straightforward:
+
+    public static void RegisterDepPropCallback(This DependencyObject owner, DependencyProperty property, EventHandler handler)
+    {
+        var dpd = DependencyPropertyDescriptor.FromProperty(property, owner.GetType());
+        dpd.AddValueChanged(owner, handler);
+    }
+
+    mainWindow.RegisterDepPropCallback(MainWindowClass.ViewModelProperty, (o,e) => {
+        Console.WriteLine("ViewModel changed!");
+    });
 
 ...but really ugly in Silverlight
 ---------------------------------
@@ -1628,11 +1988,17 @@ In ReactiveUI as of v2.0, there is a new method called
 ObservableFromDP - this method works similarly to the ViewModel's
 ObservableFromProperty, but with less syntactic noise:
 
+    mainWindow.ObservableFromDP(x => x.ViewModel).Subscribe(x => {
+        Console.WriteLine("ViewModel changed!");
+    })
+
 Of course, since it's an Observable and not an event handler, all
 of the power of Rx.NET applies to this as well. Nothing
 revolutionary, but definitely makes things easier!
 
-WCF.AsParallel() using ReactiveUI and Rx.NET
+
+# WCF.AsParallel() using ReactiveUI and Rx.NET
+
 Select.AsParallel() for the Web
 -------------------------------
 
@@ -1652,7 +2018,7 @@ asynchronous operations and sews them together in a sane way. It's
 easy to write, but what actually *happens* when we run it? Let's
 see what code runs where:
 
-![image](http://blog.paulbetts.org/wp-photos/SelectMany.png)
+![image](wp-photos/SelectMany.png)
 
 It's easy to be *way* too parallel
 ----------------------------------
